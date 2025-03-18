@@ -8,13 +8,15 @@ import android.widget.BaseAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
 
+import com.squareup.picasso.Picasso;
+
 import java.util.List;
 
 public class ImageAdapter extends BaseAdapter {
     private Context mContext;
-    private List<Bitmap> mImageList;
+    private List<String> mImageList;
 
-    public ImageAdapter(Context context, List<Bitmap> imageList) {
+    public ImageAdapter(Context context, List<String> imageList) {
         mContext = context;
         mImageList = imageList;
     }
@@ -42,8 +44,8 @@ public class ImageAdapter extends BaseAdapter {
             // If it's not recycled, initialize some attributes
             imageView = new ImageView(mContext);
             imageView.setLayoutParams(new GridView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    400));
             imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
             imageView.setPadding(8, 8, 8, 8);
         } else {
@@ -51,12 +53,12 @@ public class ImageAdapter extends BaseAdapter {
         }
 
         // Set the image for the ImageView
-        imageView.setImageBitmap(mImageList.get(position));
+        Picasso.get().load("file://"+mImageList.get(position)).resize(400, 400).centerCrop().into(imageView);
         return imageView;
     }
 
     // Method to update the image list
-    public void updateImages(List<Bitmap> newImages) {
+    public void updateImages(List<String> newImages) {
         mImageList = newImages;
         notifyDataSetChanged();
     }
