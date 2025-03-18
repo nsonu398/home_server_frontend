@@ -1,5 +1,6 @@
 package com.example.home_server_frontend.api;
 
+import com.example.home_server_frontend.api.models.ImageUploadResponse;
 import com.example.home_server_frontend.api.models.KeyExchangeResponse;
 import com.example.home_server_frontend.api.models.LoginRequest;
 import com.example.home_server_frontend.api.models.LoginResponse;
@@ -10,10 +11,15 @@ import com.example.home_server_frontend.api.models.RegistrationResponse;
 import com.example.home_server_frontend.api.models.VerificationRequest;
 import com.example.home_server_frontend.api.models.VerificationResponse;
 
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
+import retrofit2.http.Header;
+import retrofit2.http.Multipart;
 import retrofit2.http.POST;
+import retrofit2.http.Part;
 
 /**
  * Retrofit interface for API endpoints
@@ -49,4 +55,19 @@ public interface ApiService {
      */
     @POST("/api/login")
     Call<LoginResponse> login(@Body LoginRequest request);
+
+    /**
+     * Upload image to server
+     * @param auth Authentication token in the format "Bearer <token>"
+     * @param metadata Encrypted image metadata
+     * @param image The image file part
+     * @return Response containing the encrypted server response
+     */
+    @Multipart
+    @POST("/api/upload")
+    Call<ImageUploadResponse> uploadImage(
+            @Part("auth") RequestBody auth,
+            @Part("metadata") RequestBody metadata,
+            @Part MultipartBody.Part image
+    );
 }
