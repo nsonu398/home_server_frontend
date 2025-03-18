@@ -2,15 +2,14 @@ package com.example.home_server_frontend.ui;
 
 import android.os.Bundle;
 import android.view.MenuItem;
-import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 
 import com.example.home_server_frontend.R;
+import com.github.chrisbanes.photoview.PhotoView;
 import com.squareup.picasso.Picasso;
 
 import java.io.File;
@@ -20,7 +19,7 @@ public class ImageDetailsActivity extends AppCompatActivity {
     public static final String EXTRA_IMAGE_PATH = "image_path";
     public static final String EXTRA_IMAGE_NAME = "image_name";
 
-    private ImageView imageView;
+    private PhotoView imageView;
     private TextView imageName;
 
     @Override
@@ -28,7 +27,7 @@ public class ImageDetailsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_image_details);
 
-        // Set up toolbar
+        // Set up ActionBar
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
             getSupportActionBar().setTitle("Image Details");
