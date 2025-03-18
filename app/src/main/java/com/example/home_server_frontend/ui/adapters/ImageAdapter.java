@@ -8,17 +8,20 @@ import android.widget.BaseAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
 
+import com.example.home_server_frontend.ui.BottomReached;
 import com.squareup.picasso.Picasso;
 
 import java.util.List;
 
 public class ImageAdapter extends BaseAdapter {
+    private final BottomReached bottomReached;
     private Context mContext;
     private List<String> mImageList;
 
-    public ImageAdapter(Context context, List<String> imageList) {
+    public ImageAdapter(Context context, List<String> imageList, BottomReached bottomReached) {
         mContext = context;
         mImageList = imageList;
+        this.bottomReached = bottomReached;
     }
 
     @Override
@@ -54,12 +57,19 @@ public class ImageAdapter extends BaseAdapter {
 
         // Set the image for the ImageView
         Picasso.get().load("file://"+mImageList.get(position)).resize(400, 400).centerCrop().into(imageView);
+        if(position>=mImageList.size()-1){
+            bottomReached.onBottomReached();
+        }
         return imageView;
     }
 
     // Method to update the image list
     public void updateImages(List<String> newImages) {
         mImageList = newImages;
+        notifyDataSetChanged();
+    }
+    public void addImages(List<String> newImages) {
+        mImageList.addAll(newImages);
         notifyDataSetChanged();
     }
 }

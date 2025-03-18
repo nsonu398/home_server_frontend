@@ -48,6 +48,8 @@ public class MainActivity extends AppCompatActivity {
                     handlePermissionDenied();
                 }
             });
+    private int index = 1;
+    private int PAGE_SIZE = 50;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "Loaded " + imagePaths.size() + " images");
 
                 // Setup GridView
-                imageAdapter = new ImageAdapter(this, imagePaths);
+                imageAdapter = new ImageAdapter(this, imagePaths, bottomReached);
                 gridView.setAdapter(imageAdapter);
 
                 // Set item click listener
@@ -152,15 +154,17 @@ public class MainActivity extends AppCompatActivity {
                 null,
                 MediaStore.Images.Media.DATE_MODIFIED + " DESC"
         )) {
-            if (cursor != null && cursor.moveToFirst()) {
+            if (cursor != null && cursor.move(index)) {
                 int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
 
                 do {
                     String path = cursor.getString(pathColumnIndex);
                     imagePaths.add(path);
+                    index++;
 
                     // Limit to 50 images to prevent memory issues
-                    if (imagePaths.size() >= 50) {
+                    if (index >= PAGE_SIZE) {
+                        PAGE_SIZE += 50;
                         break;
                     }
                 } while (cursor.moveToNext());
@@ -175,23 +179,12 @@ public class MainActivity extends AppCompatActivity {
         return imagePaths;
     }
 
-    private List<Bitmap> loadBitmapsFromPaths(List<String> imagePaths) {
-        List<Bitmap> bitmaps = new ArrayList<>();
-
-        for (String path : imagePaths) {
-            try {
-                Bitmap bitmap = BitmapFactory.decodeFile(path);
-                if (bitmap != null) {
-                    bitmaps.add(bitmap);
-                } else {
-                    Log.w(TAG, "Failed to decode bitmap: " + path);
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Error decoding bitmap: " + path, e);
-            }
+    private final BottomReached bottomReached = new BottomReached() {
+        @Override
+        public void onBottomReached() {
+            List<String> imagePaths = getImagePaths();
+            imageAdapter.addImages(imagePaths);
         }
-
-        Log.d(TAG, "Successfully loaded " + bitmaps.size() + " bitmaps");
-        return bitmaps;
-    }
+    };
 }
+
