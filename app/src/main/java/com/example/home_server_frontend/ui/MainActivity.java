@@ -1,12 +1,9 @@
 package com.example.home_server_frontend.ui;
 
 import android.Manifest;
-import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -28,6 +25,7 @@ import com.example.home_server_frontend.R;
 import com.example.home_server_frontend.ui.adapters.ImageAdapter;
 import com.example.home_server_frontend.utils.PreferenceManager;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,6 +57,9 @@ public class MainActivity extends AppCompatActivity {
         // Initialize views
         gridView = findViewById(R.id.gridView);
         progressBar = findViewById(R.id.progress_bar);
+
+        // Initialize preference manager
+        preferenceManager = new PreferenceManager(this);
 
         // Check and request permissions
         checkStoragePermission();
@@ -130,9 +131,17 @@ public class MainActivity extends AppCompatActivity {
 
                 // Set item click listener
                 gridView.setOnItemClickListener((parent, view, position, id) -> {
-                    Toast.makeText(this,
-                            "Image " + (position + 1) + " clicked",
-                            Toast.LENGTH_SHORT).show();
+                    String imagePath = imagePaths.get(position);
+
+                    // Create intent to open image details
+                    Intent intent = new Intent(MainActivity.this, ImageDetailsActivity.class);
+                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_PATH, imagePath);
+
+                    // Extract file name from path
+                    File file = new File(imagePath);
+                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_NAME, file.getName());
+
+                    startActivity(intent);
                 });
             });
         }).start();
@@ -187,4 +196,3 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 }
-

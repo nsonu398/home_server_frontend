@@ -52,6 +52,9 @@
             android:name=".ui.ServerSettingsActivity"
             android:exported="false" />
 
+        <activity android:name=".ui.ImageDetailsActivity"
+            android:exported="false"/>
+
     </application>
 
 </manifest>
