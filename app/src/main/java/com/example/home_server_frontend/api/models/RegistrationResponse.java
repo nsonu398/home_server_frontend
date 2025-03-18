@@ -10,17 +10,12 @@ public class RegistrationResponse {
     private String message;
 
     @SerializedName("encryptedVerificationCode")
-    private String encryptedVerificationCode;
+    private HybridEncryptionPackage encryptedVerificationCode;
 
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public String getEncryptedVerificationCode() {
+    // Getters
+    public boolean isSuccess() { return success; }
+    public String getMessage() { return message; }
+    public HybridEncryptionPackage getEncryptedVerificationCode() {
         return encryptedVerificationCode;
     }
 }

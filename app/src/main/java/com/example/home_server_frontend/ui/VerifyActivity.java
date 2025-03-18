@@ -127,7 +127,7 @@ public class VerifyActivity extends AppCompatActivity {
             VerificationRequest verificationRequest = new VerificationRequest(encryptedData);
 
             // Send verification request
-            ApiClient.getApiService().verifyRegistration(verificationRequest)
+            ApiClient.getApiService(preferenceManager.getBaseUrl()).verifyRegistration(verificationRequest)
                     .enqueue(new Callback<VerificationResponse>() {
                         @Override
                         public void onResponse(Call<VerificationResponse> call, Response<VerificationResponse> response) {
@@ -160,11 +160,18 @@ public class VerifyActivity extends AppCompatActivity {
     private void handleVerificationResponse(VerificationResponse response) {
         try {
             // Decrypt the response
-            String decryptedResponse = CryptoUtils.decryptWithPrivateKey(
-                    keyManager.getPrivateKey(), response.getEncryptedResponse());
+            String decryptedJson = CryptoUtils.decryptHybridPackage(
+                    response.getEncryptedResponse(),
+                    keyManager.getPrivateKey()
+            );
+
+            if (decryptedJson == null) {
+                Toast.makeText(this, "Error decrypting response", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
             // Parse JSON
-            JSONObject jsonResponse = new JSONObject(decryptedResponse);
+            JSONObject jsonResponse = new JSONObject(decryptedJson);
             boolean success = jsonResponse.getBoolean("success");
 
             if (success) {
@@ -175,18 +182,15 @@ public class VerifyActivity extends AppCompatActivity {
                 intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 startActivity(intent);
                 finish();
-
             } else {
                 String message = jsonResponse.optString("message", "Verification failed");
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
             }
-
         } catch (Exception e) {
             Log.e(TAG, "Error processing verification response", e);
             Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
-
     /**
      * Show or hide the progress indicator
      */

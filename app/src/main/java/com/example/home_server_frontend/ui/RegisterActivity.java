@@ -111,7 +111,7 @@ public class RegisterActivity extends AppCompatActivity {
         String publicKeyPem = keyManager.getPublicKeyPem();
         RegisterClientKeyRequest request = new RegisterClientKeyRequest(username, publicKeyPem);
 
-        ApiClient.getApiService().registerClientKey(request).enqueue(new Callback<RegisterClientKeyResponse>() {
+        ApiClient.getApiService(preferenceManager.getBaseUrl()).registerClientKey(request).enqueue(new Callback<RegisterClientKeyResponse>() {
             @Override
             public void onResponse(Call<RegisterClientKeyResponse> call, Response<RegisterClientKeyResponse> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().isSuccess()) {
@@ -153,7 +153,7 @@ public class RegisterActivity extends AppCompatActivity {
             RegistrationRequest registrationRequest = new RegistrationRequest(encryptedData);
 
             // Send registration request
-            ApiClient.getApiService().register(registrationRequest).enqueue(new Callback<RegistrationResponse>() {
+            ApiClient.getApiService(preferenceManager.getBaseUrl()).register(registrationRequest).enqueue(new Callback<RegistrationResponse>() {
                 @Override
                 public void onResponse(Call<RegistrationResponse> call, Response<RegistrationResponse> response) {
                     showProgress(false);
@@ -185,13 +185,25 @@ public class RegisterActivity extends AppCompatActivity {
      * Handle successful registration response
      */
     private void handleRegistrationSuccess(RegistrationResponse response) {
-        // Decrypt the verification code
         try {
-            String encryptedVerificationCode = response.getEncryptedVerificationCode();
+            // Decrypt the verification code
+            String decryptedJson = CryptoUtils.decryptHybridPackage(
+                    response.getEncryptedVerificationCode(),
+                    keyManager.getPrivateKey()
+            );
 
-            // Navigate to verification screen with the encrypted verification code
+            if (decryptedJson == null) {
+                Toast.makeText(this, "Error decrypting verification code", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // Parse the verification code
+            JSONObject jsonData = new JSONObject(decryptedJson);
+            String verificationCode = jsonData.getString("verificationCode");
+
+            // Navigate to verification screen
             Intent intent = new Intent(this, VerifyActivity.class);
-            intent.putExtra("encryptedVerificationCode", encryptedVerificationCode);
+            intent.putExtra("verificationCode", verificationCode);
             intent.putExtra("username", preferenceManager.getUsername());
             startActivity(intent);
 
@@ -200,7 +212,6 @@ public class RegisterActivity extends AppCompatActivity {
             Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
-
     /**
      * Show or hide the progress indicator
      */

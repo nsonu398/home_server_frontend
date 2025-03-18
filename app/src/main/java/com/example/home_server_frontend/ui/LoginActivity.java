@@ -10,7 +10,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.home_server_frontend.R;
@@ -60,6 +59,9 @@ public class LoginActivity extends AppCompatActivity {
         keyManager = new KeyManager(this);
         preferenceManager = new PreferenceManager(this);
 
+        //check of auth token exists
+        checkUserLoggedIn();
+
         // Set up click listeners
         btnLogin.setOnClickListener(v -> attemptLogin());
         tvRegister.setOnClickListener(v -> navigateToRegister());
@@ -71,10 +73,19 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
-        // Check if we already have the server's public key
+        // Check if we have the server's public key
         if (keyManager.getServerPublicKey() == null) {
-            // Exchange keys with server
-            exchangeKeys();
+            // Go back to server settings if we don't have server key
+            Toast.makeText(this, "Server connection not established", Toast.LENGTH_SHORT).show();
+            navigateToServerSettings();
+            return;
+        }
+    }
+
+    private void checkUserLoggedIn() {
+        if(preferenceManager.getAuthToken()!=null && !preferenceManager.getAuthToken().isEmpty()){
+            Intent intent = new Intent(this, MainActivity.class);
+            startActivity(intent);
         }
     }
 
@@ -84,8 +95,10 @@ public class LoginActivity extends AppCompatActivity {
     private void exchangeKeys() {
         showProgress(true);
 
+        String baseUrl = preferenceManager.getBaseUrl();
+
         // Get server's public key
-        ApiClient.getApiService().getServerPublicKey().enqueue(new Callback<KeyExchangeResponse>() {
+        ApiClient.getApiService(baseUrl).getServerPublicKey().enqueue(new Callback<KeyExchangeResponse>() {
             @Override
             public void onResponse(Call<KeyExchangeResponse> call, Response<KeyExchangeResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -122,7 +135,8 @@ public class LoginActivity extends AppCompatActivity {
         String publicKeyPem = keyManager.getPublicKeyPem();
         RegisterClientKeyRequest request = new RegisterClientKeyRequest(username, publicKeyPem);
 
-        ApiClient.getApiService().registerClientKey(request).enqueue(new Callback<RegisterClientKeyResponse>() {
+        String baseUrl = preferenceManager.getBaseUrl();
+        ApiClient.getApiService(baseUrl).registerClientKey(request).enqueue(new Callback<RegisterClientKeyResponse>() {
             @Override
             public void onResponse(Call<RegisterClientKeyResponse> call, Response<RegisterClientKeyResponse> response) {
                 showProgress(false);
@@ -160,6 +174,7 @@ public class LoginActivity extends AppCompatActivity {
         String serverPublicKeyPem = keyManager.getServerPublicKey();
         if (serverPublicKeyPem == null) {
             Toast.makeText(this, "Server key not found, please restart the app", Toast.LENGTH_SHORT).show();
+            navigateToServerSettings();
             return;
         }
 
@@ -181,7 +196,8 @@ public class LoginActivity extends AppCompatActivity {
             LoginRequest loginRequest = new LoginRequest(encryptedData);
 
             // Send login request
-            ApiClient.getApiService().login(loginRequest).enqueue(new Callback<LoginResponse>() {
+            String baseUrl = preferenceManager.getBaseUrl();
+            ApiClient.getApiService(baseUrl).login(loginRequest).enqueue(new Callback<LoginResponse>() {
                 @Override
                 public void onResponse(Call<LoginResponse> call, Response<LoginResponse> response) {
                     showProgress(false);
@@ -212,15 +228,19 @@ public class LoginActivity extends AppCompatActivity {
      */
     private void handleLoginResponse(LoginResponse response) {
         try {
-            // Get the encrypted response
-            String encryptedResponse = response.getEncryptedResponse();
+            // Decrypt the hybrid encryption package
+            String decryptedJson = CryptoUtils.decryptHybridPackage(
+                    response.getEncryptedResponse(),
+                    keyManager.getPrivateKey()
+            );
 
-            // Decrypt with our private key
-            String decryptedResponse = CryptoUtils.decryptWithPrivateKey(
-                    keyManager.getPrivateKey(), encryptedResponse);
+            if (decryptedJson == null) {
+                Toast.makeText(this, "Error decrypting response", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
             // Parse the JSON
-            JSONObject jsonResponse = new JSONObject(decryptedResponse);
+            JSONObject jsonResponse = new JSONObject(decryptedJson);
             boolean success = jsonResponse.getBoolean("success");
 
             if (success) {
@@ -232,24 +252,30 @@ public class LoginActivity extends AppCompatActivity {
                 Intent intent = new Intent(this, MainActivity.class);
                 startActivity(intent);
                 finish();
-
             } else {
                 String message = jsonResponse.optString("message", "Login failed");
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
             }
-
         } catch (Exception e) {
             Log.e(TAG, "Error processing login response", e);
             Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
-
     /**
      * Navigate to registration screen
      */
     private void navigateToRegister() {
         Intent intent = new Intent(this, RegisterActivity.class);
         startActivity(intent);
+    }
+
+    /**
+     * Navigate to server settings screen
+     */
+    private void navigateToServerSettings() {
+        Intent intent = new Intent(this, ServerSettingsActivity.class);
+        startActivity(intent);
+        finish();
     }
 
     /**

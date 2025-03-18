@@ -4,9 +4,9 @@ import com.google.gson.annotations.SerializedName;
 
 public class LoginResponse {
     @SerializedName("encryptedResponse")
-    private String encryptedResponse;
+    private HybridEncryptionPackage encryptedResponse;
 
-    public String getEncryptedResponse() {
+    public HybridEncryptionPackage getEncryptedResponse() {
         return encryptedResponse;
     }
 }
