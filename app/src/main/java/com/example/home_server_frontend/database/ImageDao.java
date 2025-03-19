@@ -30,6 +30,13 @@ public interface ImageDao {
     @Query("SELECT * FROM images WHERE status = :status ORDER BY timestamp DESC")
     Flowable<List<ImageEntity>> getImagesByStatus(String status);
 
+    /**
+     * Get the oldest pending upload (by timestamp ascending)
+     * @return Flowable emitting a list with one item (the oldest) or empty list if none found
+     */
+    @Query("SELECT * FROM images WHERE status in ('PENDING', 'FAILED') ORDER BY timestamp ASC LIMIT 1")
+    Flowable<List<ImageEntity>> getOldestPendingUpload();
+
     @Query("SELECT * FROM images WHERE id = :id")
     Single<ImageEntity> getImageById(long id);
 

@@ -1,12 +1,14 @@
 package com.example.home_server_frontend.repository;
 
 import android.content.Context;
+import android.os.Build;
 
 import com.example.home_server_frontend.database.AppDatabase;
 import com.example.home_server_frontend.database.ImageDao;
 import com.example.home_server_frontend.database.ImageEntity;
 
 import java.util.List;
+import java.util.Optional;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Completable;
@@ -48,6 +50,27 @@ public class ImageRepository {
 
     public Flowable<List<ImageEntity>> getPendingUploads() {
         return imageDao.getImagesByStatus("PENDING")
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
+    }
+
+    /**
+     * Get the oldest pending upload, wrapped in an Optional
+     * @return Flowable that will emit when a pending upload becomes available
+     */
+    public Flowable<Optional<ImageEntity>> getOldestPendingUpload() {
+        return imageDao.getOldestPendingUpload()
+                .map(list -> {
+                    if (list.isEmpty()) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            return Optional.<ImageEntity>empty();
+                        }
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        return Optional.of(list.get(0));
+                    }
+                    return null;
+                })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
     }

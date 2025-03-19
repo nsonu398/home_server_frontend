@@ -22,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import com.example.home_server_frontend.R;
+import com.example.home_server_frontend.service.UploadService;
 import com.example.home_server_frontend.ui.adapters.ImageAdapter;
 import com.example.home_server_frontend.utils.PreferenceManager;
 
@@ -42,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
                     loadDeviceImages();
+                    startUploadService();
                 } else {
                     handlePermissionDenied();
                 }
@@ -65,6 +67,17 @@ public class MainActivity extends AppCompatActivity {
         checkStoragePermission();
     }
 
+    private void startUploadService() {
+        Intent serviceIntent = new Intent(this, UploadService.class);
+
+        // Starting service as foreground service for Android O and higher
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+    }
+
     private void checkStoragePermission() {
         // Determine the appropriate permission based on Android version
         String permission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
@@ -76,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
                 == PackageManager.PERMISSION_GRANTED) {
             // Permission already granted
             loadDeviceImages();
+            startUploadService();
         } else {
             // Request permission
             requestPermissionLauncher.launch(permission);
