@@ -85,6 +85,23 @@ public class PreferenceManager {
     }
 
     /**
+     * Check if automatic upload is enabled
+     * @return true if automatic upload is enabled, false otherwise
+     */
+    public boolean isAutoUploadEnabled() {
+        // Default to false if not set
+        return sharedPreferences.getBoolean(Constants.PREF_AUTO_UPLOAD_ENABLED, false);
+    }
+
+    /**
+     * Set automatic upload preference
+     * @param enabled whether automatic upload should be enabled
+     */
+    public void setAutoUploadEnabled(boolean enabled) {
+        sharedPreferences.edit().putBoolean(Constants.PREF_AUTO_UPLOAD_ENABLED, enabled).apply();
+    }
+
+    /**
      * Clear all user data
      */
     public void clearUserData() {

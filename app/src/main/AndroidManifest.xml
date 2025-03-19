@@ -67,6 +67,9 @@
             android:foregroundServiceType="dataSync"
             tools:ignore="ForegroundServicePermission" />
 
+        <activity android:name=".ui.SettingsActivity"
+            android:exported="false"/>
+
     </application>
 
 </manifest>
