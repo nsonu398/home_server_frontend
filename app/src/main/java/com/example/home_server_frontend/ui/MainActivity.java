@@ -38,16 +38,31 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private PreferenceManager preferenceManager;
 
-    // Activity result launcher for permission handling
-    private final ActivityResultLauncher<String> requestPermissionLauncher =
+    // Activity result launcher for storage permission handling
+    private final ActivityResultLauncher<String> requestStoragePermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
                     loadDeviceImages();
-                    startUploadService();
+                    checkNotificationPermission();
                 } else {
-                    handlePermissionDenied();
+                    handleStoragePermissionDenied();
                 }
             });
+
+    // Activity result launcher for notification permission handling
+    private final ActivityResultLauncher<String> requestNotificationPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    startUploadService();
+                } else {
+                    // We can still start the service, but warn the user about limited functionality
+                    Toast.makeText(this,
+                            "Upload service will run with limited notifications",
+                            Toast.LENGTH_LONG).show();
+                    startUploadService();
+                }
+            });
+
     private int index = 1;
     private int PAGE_SIZE = 50;
 
@@ -76,6 +91,25 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startService(serviceIntent);
         }
+
+        Log.d(TAG, "Upload service started");
+    }
+
+    private void checkNotificationPermission() {
+        // Only need to request POST_NOTIFICATIONS permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED) {
+                // Permission already granted
+                startUploadService();
+            } else {
+                // Request notification permission
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        } else {
+            // Notification permission not required for older versions
+            startUploadService();
+        }
     }
 
     private void checkStoragePermission() {
@@ -89,14 +123,14 @@ public class MainActivity extends AppCompatActivity {
                 == PackageManager.PERMISSION_GRANTED) {
             // Permission already granted
             loadDeviceImages();
-            startUploadService();
+            checkNotificationPermission();
         } else {
             // Request permission
-            requestPermissionLauncher.launch(permission);
+            requestStoragePermissionLauncher.launch(permission);
         }
     }
 
-    private void handlePermissionDenied() {
+    private void handleStoragePermissionDenied() {
         new AlertDialog.Builder(this)
                 .setTitle("Permission Required")
                 .setMessage("Storage permission is needed to display images. Go to app settings?")

@@ -1,17 +1,20 @@
 package com.example.home_server_frontend.service;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import com.example.home_server_frontend.R;
 import com.example.home_server_frontend.api.ApiClient;
@@ -53,6 +56,7 @@ public class UploadService extends Service {
     private ApiService apiService;
     private final CompositeDisposable disposables = new CompositeDisposable();
     private AtomicBoolean isProcessingUpload = new AtomicBoolean(false);
+    private boolean hasNotificationPermission = false;
 
     @Override
     public void onCreate() {
@@ -65,8 +69,30 @@ public class UploadService extends Service {
         // Initialize API service
         apiService = ApiClient.getApiService(preferenceManager.getBaseUrl());
 
+        // Check if we have notification permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            hasNotificationPermission = ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        } else {
+            // On older Android versions, we don't need explicit permission
+            hasNotificationPermission = true;
+        }
+
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, createNotification("Image Upload Service", "Ready to upload images").build());
+
+        // Start as foreground service with notification
+        if (hasNotificationPermission || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            startForeground(NOTIFICATION_ID, createNotification("Image Upload Service", "Ready to upload images").build());
+        } else {
+            // For Android 13+ without notification permission, we still need to start foreground
+            // but the notification won't be visible
+            try {
+                startForeground(NOTIFICATION_ID, createNotification("Upload Service", "").build());
+                Log.i(TAG, "Started foreground service without notification permission");
+            } catch (Exception e) {
+                Log.e(TAG, "Error starting foreground service", e);
+            }
+        }
 
         // Setup the upload observer
         if (preferenceManager.isLoggedIn()) {
@@ -116,7 +142,9 @@ public class UploadService extends Service {
                                             // No pending uploads, release the processing flag
                                             isProcessingUpload.set(false);
                                             Log.d(TAG, "No pending uploads found");
-                                            updateNotification("Upload Service", "No pending uploads");
+                                            if (hasNotificationPermission) {
+                                                updateNotification("Upload Service", "No pending uploads");
+                                            }
                                         }
                                     },
                                     throwable -> {
@@ -151,7 +179,9 @@ public class UploadService extends Service {
                 .subscribe(
                         () -> {
                             // Notify user about upload start
-                            updateNotification("Uploading", "Uploading " + image.getFileName());
+                            if (hasNotificationPermission) {
+                                updateNotification("Uploading", "Uploading " + image.getFileName());
+                            }
                             Log.d(TAG, "Starting upload for: " + image.getFileName());
 
                             // Perform the actual upload
@@ -167,6 +197,10 @@ public class UploadService extends Service {
 
     private void performImageUpload(ImageEntity image) {
         try {
+            if (hasNotificationPermission) {
+                updateNotification("Preparing Upload", "Preparing to upload " + image.getFileName());
+            }
+
             // Get authentication token
             String authToken = preferenceManager.getAuthToken();
             if (authToken == null) {
@@ -193,6 +227,10 @@ public class UploadService extends Service {
                 return;
             }
 
+            if (hasNotificationPermission) {
+                updateNotification("Encrypting", "Encrypting metadata for " + image.getFileName());
+            }
+
             // Create a JSON metadata object
             JSONObject metadata = new JSONObject();
             metadata.put("fileName", image.getFileName());
@@ -201,6 +239,11 @@ public class UploadService extends Service {
 
             // Encrypt the metadata
             String encryptedMetadata = CryptoUtils.encryptWithPublicKey(serverPublicKey, metadata.toString());
+
+            if (hasNotificationPermission) {
+                updateNotification("Uploading", "Uploading " + image.getFileName() + " (" +
+                        (image.getSize() / 1024) + " KB)");
+            }
 
             // Create multipart request
             MultipartBody.Part filePart = prepareFilePart("image", imageFile);
@@ -214,6 +257,9 @@ public class UploadService extends Service {
                 @Override
                 public void onResponse(Call<ImageUploadResponse> call, Response<ImageUploadResponse> response) {
                     if (response.isSuccessful() && response.body() != null) {
+                        if (hasNotificationPermission) {
+                            updateNotification("Processing", "Server processing " + image.getFileName());
+                        }
                         handleUploadSuccess(image, response.body());
                     } else {
                         String errorMessage = "Server error: " + (response.code() == 401 ? "Unauthorized" :
@@ -273,7 +319,9 @@ public class UploadService extends Service {
                         .subscribeOn(Schedulers.io())
                         .subscribe(
                                 () -> {
-                                    updateNotification("Upload Complete", "Uploaded " + image.getFileName());
+                                    if (hasNotificationPermission) {
+                                        updateNotification("Upload Complete", "Uploaded " + image.getFileName());
+                                    }
                                     Log.d(TAG, "Image uploaded successfully: " + image.getFileName());
 
                                     // Release the processing flag
@@ -305,7 +353,9 @@ public class UploadService extends Service {
                 .subscribeOn(Schedulers.io())
                 .subscribe(
                         () -> {
-                            updateNotification("Upload Failed", "Failed to upload " + image.getFileName() + ": " + errorMessage);
+                            if (hasNotificationPermission) {
+                                updateNotification("Upload Failed", "Failed to upload " + image.getFileName() + ": " + errorMessage);
+                            }
                             Log.e(TAG, "Upload failed for " + image.getFileName() + ": " + errorMessage);
 
                             // Release the processing flag
@@ -325,21 +375,46 @@ public class UploadService extends Service {
     }
 
     private void updateNotification(String title, String content) {
-        NotificationManager notificationManager =
-                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        // Only update notification if we have permission
+        if (!hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Log.d(TAG, "Skipping notification update (no permission): " + title);
+            return;
+        }
 
-        notificationManager.notify(
-                NOTIFICATION_ID,
-                createNotification(title, content).build()
-        );
+        // Run notification updates on main thread
+        android.os.Handler mainHandler = new android.os.Handler(getMainLooper());
+        mainHandler.post(() -> {
+            try {
+                NotificationManager notificationManager =
+                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+                NotificationCompat.Builder notificationBuilder = createNotification(title, content);
+
+                // Log notification update for debugging
+                Log.d(TAG, "Updating notification: " + title + " - " + content);
+
+                notificationManager.notify(NOTIFICATION_ID, notificationBuilder.build());
+            } catch (Exception e) {
+                Log.e(TAG, "Error updating notification", e);
+            }
+        });
     }
 
     private NotificationCompat.Builder createNotification(String title, String content) {
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(content)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setPriority(NotificationCompat.PRIORITY_LOW);
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true);
+
+        // Show upload activity with ongoing progress
+        if (title.contains("Uploading")) {
+            builder.setProgress(0, 0, true); // Indeterminate progress
+        }
+
+        return builder;
     }
 
     private void createNotificationChannel() {
@@ -347,11 +422,19 @@ public class UploadService extends Service {
             NotificationChannel serviceChannel = new NotificationChannel(
                     CHANNEL_ID,
                     "Image Upload Service Channel",
-                    NotificationManager.IMPORTANCE_LOW
+                    NotificationManager.IMPORTANCE_DEFAULT
             );
+
+            serviceChannel.setDescription("Shows status of image uploads");
+            serviceChannel.enableLights(true);
+            serviceChannel.setLightColor(android.graphics.Color.BLUE);
+            serviceChannel.enableVibration(true);
+            serviceChannel.setShowBadge(true);
 
             NotificationManager manager = getSystemService(NotificationManager.class);
             manager.createNotificationChannel(serviceChannel);
+
+            Log.d(TAG, "Notification channel created");
         }
     }
 
