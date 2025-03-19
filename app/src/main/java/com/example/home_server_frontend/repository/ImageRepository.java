@@ -48,8 +48,8 @@ public class ImageRepository {
                 .observeOn(AndroidSchedulers.mainThread());
     }
 
-    public Flowable<List<ImageEntity>> getPendingUploads() {
-        return imageDao.getImagesByStatus("PENDING")
+    public Flowable<List<ImageEntity>> getImagesByStatus(String status) {
+        return imageDao.getImagesByStatus(status)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
     }

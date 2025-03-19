@@ -29,6 +29,7 @@ import java.io.File;
 import java.security.PublicKey;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Observable;
@@ -51,6 +52,7 @@ public class UploadService extends Service {
     private KeyManager keyManager;
     private ApiService apiService;
     private final CompositeDisposable disposables = new CompositeDisposable();
+    private AtomicBoolean isProcessingUpload = new AtomicBoolean(false);
 
     @Override
     public void onCreate() {
@@ -69,31 +71,62 @@ public class UploadService extends Service {
         // Setup the upload observer
         if (preferenceManager.isLoggedIn()) {
             setupUploadObserver();
+            // Trigger the first upload immediately when the service starts
+            checkForPendingUploads();
         }
     }
 
     private void setupUploadObserver() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // Observe for completed uploads (status = "UPLOADED")
             disposables.add(
-                    // Get oldest pending upload continuously
-                    imageRepository.getOldestPendingUpload()
+                    imageRepository.getImagesByStatus("UPLOADED")
                             .subscribeOn(Schedulers.io())
-                            .filter(Optional::isPresent) // Only proceed when we have an image
-                            .map(Optional::get)
-                            .flatMapCompletable(image ->
-                                    // Process one image completely before moving to the next
-                                    processImageUpload(image)
-                            )
-                            .repeat() // Repeat the sequence after completion
+                            .distinctUntilChanged() // Only emit when the list of uploaded images changes
                             .subscribe(
-                                    () -> Log.d(TAG, "Upload cycle completed, waiting for next image"),
+                                    uploadedImages -> {
+                                        // When a new upload completes, check for pending uploads
+                                        Log.d(TAG, "Upload completed, checking for more pending uploads");
+                                        checkForPendingUploads();
+                                    },
                                     throwable -> {
-                                        Log.e(TAG, "Error in upload observer", throwable);
+                                        Log.e(TAG, "Error observing uploaded images", throwable);
                                         // Restart the observer after a short delay
                                         setupDelayedRestartOfObserver();
                                     }
                             )
             );
+        }
+    }
+
+    private void checkForPendingUploads() {
+        // Only proceed if we're not already processing an upload
+        if (isProcessingUpload.compareAndSet(false, true)) {
+            disposables.add(
+                    imageRepository.getOldestPendingUpload()
+                            .subscribeOn(Schedulers.io())
+                            .take(1) // Important: only take one item
+                            .subscribe(
+                                    optionalImage -> {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && optionalImage.isPresent()) {
+                                            ImageEntity image = optionalImage.get();
+                                            Log.d(TAG, "Found pending upload: " + image.getFileName());
+                                            processImageUpload(image);
+                                        } else {
+                                            // No pending uploads, release the processing flag
+                                            isProcessingUpload.set(false);
+                                            Log.d(TAG, "No pending uploads found");
+                                            updateNotification("Upload Service", "No pending uploads");
+                                        }
+                                    },
+                                    throwable -> {
+                                        Log.e(TAG, "Error checking for pending uploads", throwable);
+                                        isProcessingUpload.set(false);
+                                    }
+                            )
+            );
+        } else {
+            Log.d(TAG, "Already processing an upload, skipping check");
         }
     }
 
@@ -104,56 +137,41 @@ public class UploadService extends Service {
                         .subscribe(tick -> {
                             if (preferenceManager.isLoggedIn()) {
                                 setupUploadObserver();
+                                checkForPendingUploads();
                             }
                         })
         );
     }
 
     @SuppressLint("CheckResult")
-    private Completable processImageUpload(ImageEntity image) {
-        return Completable.create(emitter -> {
-            try {
-                // Update status to UPLOADING
-                imageRepository.updateImageStatus(image.getId(), "UPLOADING")
-                        .subscribe(
-                                () -> {
-                                    // Notify user about upload start
-                                    updateNotification("Uploading", "Uploading " + image.getFileName());
+    private void processImageUpload(ImageEntity image) {
+        // Update status to UPLOADING
+        imageRepository.updateImageStatus(image.getId(), "UPLOADING")
+                .subscribeOn(Schedulers.io())
+                .subscribe(
+                        () -> {
+                            // Notify user about upload start
+                            updateNotification("Uploading", "Uploading " + image.getFileName());
+                            Log.d(TAG, "Starting upload for: " + image.getFileName());
 
-                                    // Perform the actual upload
-                                    performImageUpload(image, new UploadCallback() {
-                                        @Override
-                                        public void onSuccess() {
-                                            emitter.onComplete();
-                                        }
-
-                                        @Override
-                                        public void onFailure(String error) {
-                                            emitter.onError(new Exception(error));
-                                        }
-                                    });
-                                },
-                                error -> emitter.onError(error)
-                        );
-            } catch (Exception e) {
-                emitter.onError(e);
-            }
-        });
+                            // Perform the actual upload
+                            performImageUpload(image);
+                        },
+                        error -> {
+                            Log.e(TAG, "Error updating image status to UPLOADING", error);
+                            isProcessingUpload.set(false);
+                            checkForPendingUploads(); // Try the next image
+                        }
+                );
     }
 
-    // Interface for upload callbacks
-    private interface UploadCallback {
-        void onSuccess();
-        void onFailure(String error);
-    }
-
-    private void performImageUpload(ImageEntity image, UploadCallback callback) {
+    private void performImageUpload(ImageEntity image) {
         try {
             // Get authentication token
             String authToken = preferenceManager.getAuthToken();
             if (authToken == null) {
                 Log.e(TAG, "No auth token available");
-                handleUploadFailure(image, "Authentication error", callback);
+                handleUploadFailure(image, "Authentication error");
                 return;
             }
 
@@ -161,7 +179,7 @@ public class UploadService extends Service {
             String serverPublicKeyPem = keyManager.getServerPublicKey();
             if (serverPublicKeyPem == null) {
                 Log.e(TAG, "Server public key not found");
-                handleUploadFailure(image, "Encryption error", callback);
+                handleUploadFailure(image, "Encryption error");
                 return;
             }
 
@@ -171,7 +189,7 @@ public class UploadService extends Service {
             File imageFile = new File(image.getLocalUrl());
             if (!imageFile.exists()) {
                 Log.e(TAG, "Image file does not exist: " + image.getLocalUrl());
-                handleUploadFailure(image, "File not found", callback);
+                handleUploadFailure(image, "File not found");
                 return;
             }
 
@@ -196,26 +214,26 @@ public class UploadService extends Service {
                 @Override
                 public void onResponse(Call<ImageUploadResponse> call, Response<ImageUploadResponse> response) {
                     if (response.isSuccessful() && response.body() != null) {
-                        handleUploadSuccess(image, response.body(), callback);
+                        handleUploadSuccess(image, response.body());
                     } else {
                         String errorMessage = "Server error: " + (response.code() == 401 ? "Unauthorized" :
                                 response.code() == 404 ? "Not found" :
                                         "Error code " + response.code());
                         Log.e(TAG, errorMessage);
-                        handleUploadFailure(image, errorMessage, callback);
+                        handleUploadFailure(image, errorMessage);
                     }
                 }
 
                 @Override
                 public void onFailure(Call<ImageUploadResponse> call, Throwable t) {
                     Log.e(TAG, "Upload failed", t);
-                    handleUploadFailure(image, "Network error: " + t.getMessage(), callback);
+                    handleUploadFailure(image, "Network error: " + t.getMessage());
                 }
             });
 
         } catch (Exception e) {
             Log.e(TAG, "Error preparing upload", e);
-            handleUploadFailure(image, "Upload error: " + e.getMessage(), callback);
+            handleUploadFailure(image, "Upload error: " + e.getMessage());
         }
     }
 
@@ -228,7 +246,7 @@ public class UploadService extends Service {
     }
 
     @SuppressLint("CheckResult")
-    private void handleUploadSuccess(ImageEntity image, ImageUploadResponse response, UploadCallback callback) {
+    private void handleUploadSuccess(ImageEntity image, ImageUploadResponse response) {
         try {
             // Decrypt the server's response
             String decryptedJson = CryptoUtils.decryptHybridPackage(
@@ -238,7 +256,7 @@ public class UploadService extends Service {
 
             if (decryptedJson == null) {
                 Log.e(TAG, "Failed to decrypt server response");
-                handleUploadFailure(image, "Decryption error", callback);
+                handleUploadFailure(image, "Decryption error");
                 return;
             }
 
@@ -252,36 +270,58 @@ public class UploadService extends Service {
 
                 // Update the database
                 imageRepository.setImageUploaded(image.getId(), remoteUrl)
-                        .subscribe(() -> {
-                            updateNotification("Upload Complete", "Uploaded " + image.getFileName());
-                            Log.d(TAG, "Image uploaded successfully: " + image.getFileName());
-                            callback.onSuccess();
-                        }, throwable -> {
-                            Log.e(TAG, "Error updating database after successful upload", throwable);
-                            callback.onFailure("Database error after upload: " + throwable.getMessage());
-                        });
+                        .subscribeOn(Schedulers.io())
+                        .subscribe(
+                                () -> {
+                                    updateNotification("Upload Complete", "Uploaded " + image.getFileName());
+                                    Log.d(TAG, "Image uploaded successfully: " + image.getFileName());
+
+                                    // Release the processing flag
+                                    isProcessingUpload.set(false);
+
+                                    // The status change to UPLOADED will trigger checkForPendingUploads via the observer
+                                },
+                                throwable -> {
+                                    Log.e(TAG, "Error updating database after successful upload", throwable);
+                                    isProcessingUpload.set(false);
+                                    checkForPendingUploads(); // Try the next image
+                                }
+                        );
             } else {
                 String errorMessage = jsonResponse.optString("message", "Upload failed on server");
                 Log.e(TAG, errorMessage);
-                handleUploadFailure(image, errorMessage, callback);
+                handleUploadFailure(image, errorMessage);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error processing upload response", e);
-            handleUploadFailure(image, "Error processing response: " + e.getMessage(), callback);
+            handleUploadFailure(image, "Error processing response: " + e.getMessage());
         }
     }
 
     @SuppressLint("CheckResult")
-    private void handleUploadFailure(ImageEntity image, String errorMessage, UploadCallback callback) {
+    private void handleUploadFailure(ImageEntity image, String errorMessage) {
         // Update status to FAILED
         imageRepository.updateImageStatus(image.getId(), "FAILED")
-                .subscribe(() -> {
-                    updateNotification("Upload Failed", "Failed to upload " + image.getFileName() + ": " + errorMessage);
-                    callback.onFailure(errorMessage);
-                }, throwable -> {
-                    Log.e(TAG, "Error updating image status to FAILED", throwable);
-                    callback.onFailure("Error updating image status: " + throwable.getMessage());
-                });
+                .subscribeOn(Schedulers.io())
+                .subscribe(
+                        () -> {
+                            updateNotification("Upload Failed", "Failed to upload " + image.getFileName() + ": " + errorMessage);
+                            Log.e(TAG, "Upload failed for " + image.getFileName() + ": " + errorMessage);
+
+                            // Release the processing flag
+                            isProcessingUpload.set(false);
+
+                            // Check for the next pending upload after a short delay
+                            Observable.timer(5, TimeUnit.SECONDS)
+                                    .subscribeOn(Schedulers.io())
+                                    .subscribe(tick -> checkForPendingUploads());
+                        },
+                        throwable -> {
+                            Log.e(TAG, "Error updating image status to FAILED", throwable);
+                            isProcessingUpload.set(false);
+                            checkForPendingUploads(); // Try the next image
+                        }
+                );
     }
 
     private void updateNotification(String title, String content) {
@@ -320,6 +360,7 @@ public class UploadService extends Service {
         // Check if user is logged in and setup observer if necessary
         if (preferenceManager.isLoggedIn() && disposables.size() == 0) {
             setupUploadObserver();
+            checkForPendingUploads();
         }
         return START_STICKY;
     }

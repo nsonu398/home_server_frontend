@@ -139,7 +139,7 @@ public class ImageDetailsActivity extends AppCompatActivity {
                                 id -> {
                                     Toast.makeText(this, "Image added to upload queue", Toast.LENGTH_SHORT).show();
                                     // Here you could trigger the actual upload service if desired
-                                    startUploadService();
+                                    //startUploadService();
                                 },
                                 error -> {
                                     Toast.makeText(this, "Failed to add image to upload queue", Toast.LENGTH_SHORT).show();
