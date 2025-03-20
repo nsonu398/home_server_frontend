@@ -60,7 +60,7 @@ public class VerifyActivity extends AppCompatActivity {
         preferenceManager = new PreferenceManager(this);
 
         // Get extras from intent
-        encryptedVerificationCode = getIntent().getStringExtra("encryptedVerificationCode");
+        encryptedVerificationCode = getIntent().getStringExtra("verificationCode");
         username = getIntent().getStringExtra("username");
 
         if (encryptedVerificationCode == null || username == null) {

@@ -298,8 +298,8 @@ public class MainActivity extends AppCompatActivity {
     private void addAllImagesToDatabase(List<String> imageList) {
         List<ImageEntity> list = new ArrayList<>();
         for (String imagePath : imageList){
-            if(){
-
+            if(!ImageUtils.isValidImageFile(imagePath)){
+                continue;
             }
             File file = new File(imagePath);
             long fileSize = ImageUtils.getImageSize(imagePath);

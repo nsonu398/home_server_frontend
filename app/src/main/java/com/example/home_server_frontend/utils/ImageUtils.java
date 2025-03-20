@@ -52,4 +52,14 @@ public class ImageUtils {
 
         return String.format("%.1f %s", size / Math.pow(1024, digitGroups), units[digitGroups]);
     }
+
+    public static boolean isValidImageFile(String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            return false;
+        }
+
+        String lowerCasePath = filePath.toLowerCase();
+        return lowerCasePath.endsWith(".jpg") || lowerCasePath.endsWith(".jpeg") ||
+                lowerCasePath.endsWith(".png") || lowerCasePath.endsWith(".gif");
+    }
 }
