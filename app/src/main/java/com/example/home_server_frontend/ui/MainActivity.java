@@ -201,7 +201,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Run image loading in a background thread
         new Thread(() -> {
-            List<String> imagePaths = getImagePaths();
+            List<ImageData> imagePaths = getImagePaths();
 
             // Update UI on main thread
             runOnUiThread(() -> {
@@ -223,15 +223,17 @@ public class MainActivity extends AppCompatActivity {
 
                 // Set item click listener
                 gridView.setOnItemClickListener((parent, view, position, id) -> {
-                    String imagePath = imagePaths.get(position);
+                    ImageData imagePath = imagePaths.get(position);
 
                     // Create intent to open image details
                     Intent intent = new Intent(MainActivity.this, ImageDetailsActivity.class);
-                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_PATH, imagePath);
+                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_PATH, imagePath.path);
 
                     // Extract file name from path
-                    File file = new File(imagePath);
+                    File file = new File(imagePath.path);
                     intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_NAME, file.getName());
+                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_ID, imagePath.id);
+                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_UPDATE_TIME, imagePath.updatedTime);
 
                     startActivity(intent);
                 });
@@ -239,12 +241,14 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private List<String> getImagePaths() {
-        List<String> imagePaths = new ArrayList<>();
+    private List<ImageData> getImagePaths() {
+        List<ImageData> imagePaths = new ArrayList<>();
 
         // Projection for image query
         String[] projection = {
-                MediaStore.Images.Media.DATA
+                MediaStore.Images.Media.DATA,
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATE_MODIFIED
         };
 
         // Query external storage for images
@@ -257,10 +261,15 @@ public class MainActivity extends AppCompatActivity {
         )) {
             if (cursor != null && cursor.move(index)) {
                 int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                int idColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                int dateModifiedColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED);
 
                 do {
                     String path = cursor.getString(pathColumnIndex);
-                    imagePaths.add(path);
+                    String imageId = cursor.getString(idColumnIndex);
+                    long updatedTime = cursor.getLong(dateModifiedColumnIndex) * 1000; // Convert to milliseconds
+
+                    imagePaths.add(new ImageData(path, imageId, updatedTime));
                     index++;
 
                     // Limit to 50 images to prevent memory issues
@@ -295,21 +304,23 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "error: ");
             });
 
-    private void addAllImagesToDatabase(List<String> imageList) {
+    private void addAllImagesToDatabase(List<ImageData> imageList) {
         List<ImageEntity> list = new ArrayList<>();
-        for (String imagePath : imageList){
-            if(!ImageUtils.isValidImageFile(imagePath)){
+        for (ImageData imageData : imageList){
+            if(!ImageUtils.isValidImageFile(imageData.path)){
                 continue;
             }
-            File file = new File(imagePath);
-            long fileSize = ImageUtils.getImageSize(imagePath);
-            String resolution = ImageUtils.getImageResolution(imagePath);
+            File file = new File(imageData.path);
+            long fileSize = ImageUtils.getImageSize(imageData.path);
+            String resolution = ImageUtils.getImageResolution(imageData.path);
             ImageEntity imageEntity = new ImageEntity(
-                    imagePath,
+                    imageData.path,
                     "PENDING",  // Initial status
                     fileSize,
                     resolution,
-                    file.getName()
+                    file.getName(),
+                    imageData.id,
+                    imageData.updatedTime
             );
             list.add(imageEntity);
         }
@@ -331,12 +342,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    private List<String> getAllImagePaths() {
-        List<String> imagePaths = new ArrayList<>();
+    private List<ImageData> getAllImagePaths() {
+        List<ImageData> imageDataList = new ArrayList<>();
 
-        // Projection for image query
+        // Update projection to include ID and last modified date
         String[] projection = {
-                MediaStore.Images.Media.DATA
+                MediaStore.Images.Media.DATA,
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATE_MODIFIED
         };
 
         // Query external storage for images
@@ -349,11 +362,19 @@ public class MainActivity extends AppCompatActivity {
         )) {
             if (cursor != null && cursor.moveToFirst()) {
                 int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-
+                int idColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                int dateModifiedColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED);
+                int index = 0;
                 do {
                     String path = cursor.getString(pathColumnIndex);
-                    imagePaths.add(path);
-                } while (cursor.moveToNext());
+                    String imageId = cursor.getString(idColumnIndex);
+                    long updatedTime = cursor.getLong(dateModifiedColumnIndex) * 1000; // Convert to milliseconds
+
+                    // Store as a tuple of path, id, and modified time
+                    ImageData imageData = new ImageData(path, imageId, updatedTime);
+                    imageDataList.add(imageData);
+                    index++;
+                } while (cursor.moveToNext() && index<10);
             } else {
                 Log.e(TAG, "No images found or cursor is null");
             }
@@ -361,15 +382,14 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Error querying images", e);
         }
 
-        Log.d(TAG, "Found " + imagePaths.size() + " image paths");
-        return imagePaths;
+        Log.d(TAG, "Found " + imageDataList.size() + " image paths");
+        return imageDataList;
     }
-
 
     private final BottomReached bottomReached = new BottomReached() {
         @Override
         public void onBottomReached() {
-            List<String> imagePaths = getImagePaths();
+            List<ImageData> imagePaths = getImagePaths();
             imageAdapter.addImages(imagePaths);
         }
     };
@@ -380,5 +400,29 @@ public class MainActivity extends AppCompatActivity {
             disposable.dispose();
         }
         super.onDestroy();
+    }
+
+    public static class ImageData {
+        public String path;
+        public String id;
+        public long updatedTime;
+
+        ImageData(String path, String id, long updatedTime) {
+            this.path = path;
+            this.id = id;
+            this.updatedTime = updatedTime;
+        }
+
+        public long getUpdatedTime() {
+            return updatedTime;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getPath() {
+            return path;
+        }
     }
 }

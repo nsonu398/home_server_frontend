@@ -9,6 +9,7 @@ import android.widget.GridView;
 import android.widget.ImageView;
 
 import com.example.home_server_frontend.ui.BottomReached;
+import com.example.home_server_frontend.ui.MainActivity;
 import com.squareup.picasso.Picasso;
 
 import java.util.List;
@@ -16,9 +17,9 @@ import java.util.List;
 public class ImageAdapter extends BaseAdapter {
     private final BottomReached bottomReached;
     private Context mContext;
-    private List<String> mImageList;
+    private List<MainActivity.ImageData> mImageList;
 
-    public ImageAdapter(Context context, List<String> imageList, BottomReached bottomReached) {
+    public ImageAdapter(Context context, List<MainActivity.ImageData> imageList, BottomReached bottomReached) {
         mContext = context;
         mImageList = imageList;
         this.bottomReached = bottomReached;
@@ -56,7 +57,7 @@ public class ImageAdapter extends BaseAdapter {
         }
 
         // Set the image for the ImageView
-        Picasso.get().load("file://"+mImageList.get(position)).resize(400, 400).centerCrop().into(imageView);
+        Picasso.get().load("file://"+mImageList.get(position).getPath()).resize(400, 400).centerCrop().into(imageView);
         if(position>=mImageList.size()-1){
             bottomReached.onBottomReached();
         }
@@ -64,11 +65,11 @@ public class ImageAdapter extends BaseAdapter {
     }
 
     // Method to update the image list
-    public void updateImages(List<String> newImages) {
+    public void updateImages(List<MainActivity.ImageData> newImages) {
         mImageList = newImages;
         notifyDataSetChanged();
     }
-    public void addImages(List<String> newImages) {
+    public void addImages(List<MainActivity.ImageData> newImages) {
         mImageList.addAll(newImages);
         notifyDataSetChanged();
     }

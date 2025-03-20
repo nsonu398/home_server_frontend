@@ -236,6 +236,8 @@ public class UploadService extends Service {
             metadata.put("fileName", image.getFileName());
             metadata.put("size", image.getSize());
             metadata.put("resolution", image.getResolution());
+            metadata.put("imageId", image.getImageId());
+            metadata.put("updatedTime", image.getUpdatedTime());
 
             // Encrypt the metadata
             String encryptedMetadata = CryptoUtils.encryptWithPublicKey(serverPublicKey, metadata.toString());

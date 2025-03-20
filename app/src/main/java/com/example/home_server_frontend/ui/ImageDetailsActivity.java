@@ -28,6 +28,8 @@ public class ImageDetailsActivity extends AppCompatActivity {
 
     public static final String EXTRA_IMAGE_PATH = "image_path";
     public static final String EXTRA_IMAGE_NAME = "image_name";
+    public static final String EXTRA_IMAGE_ID = "image_id";
+    public static final String EXTRA_IMAGE_UPDATE_TIME = "image_update_time";
 
     private PhotoView imageView;
     private TextView imageName;
@@ -35,6 +37,8 @@ public class ImageDetailsActivity extends AppCompatActivity {
     private String imagePath;
     private String imageFileName;
     private final CompositeDisposable disposables = new CompositeDisposable();
+    private String imageID;
+    private Long imageUpdateTime;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -57,6 +61,8 @@ public class ImageDetailsActivity extends AppCompatActivity {
         // Get intent data
         imagePath = getIntent().getStringExtra(EXTRA_IMAGE_PATH);
         imageFileName = getIntent().getStringExtra(EXTRA_IMAGE_NAME);
+        imageID = getIntent().getStringExtra(EXTRA_IMAGE_ID);
+        imageUpdateTime = getIntent().getLongExtra(EXTRA_IMAGE_UPDATE_TIME, 0L);
 
         if (imagePath != null) {
             // Load the image using Picasso
@@ -113,7 +119,9 @@ public class ImageDetailsActivity extends AppCompatActivity {
                 "PENDING",  // Initial status
                 fileSize,
                 resolution,
-                imageFileName
+                imageFileName,
+                imageID,
+                imageUpdateTime
         );
 
         // Save to database

@@ -25,18 +25,40 @@ public class ImageEntity {
 
     private String fileName;
 
-    // Constructor
+    // New fields
+    private String imageId; // MediaStore image ID
+    private long updatedTime; // Last modified time
+
+    // Update constructor
     public ImageEntity(@NonNull String localUrl, @NonNull String status, long size,
-                       String resolution, String fileName) {
+                       String resolution, String fileName, String imageId, long updatedTime) {
         this.localUrl = localUrl;
         this.status = status;
         this.size = size;
         this.resolution = resolution;
         this.timestamp = System.currentTimeMillis();
         this.fileName = fileName;
+        this.imageId = imageId;
+        this.updatedTime = updatedTime;
     }
 
-    // Getters and Setters
+    // Add getters and setters
+    public String getImageId() {
+        return imageId;
+    }
+
+    public void setImageId(String imageId) {
+        this.imageId = imageId;
+    }
+
+    public long getUpdatedTime() {
+        return updatedTime;
+    }
+
+    public void setUpdatedTime(long updatedTime) {
+        this.updatedTime = updatedTime;
+    }
+
     public long getId() {
         return id;
     }
