@@ -193,7 +193,7 @@ public class LoginActivity extends AppCompatActivity {
             String encryptedData = CryptoUtils.encryptWithPublicKey(serverPublicKey, loginJson.toString());
 
             // Create login request
-            LoginRequest loginRequest = new LoginRequest(encryptedData);
+            LoginRequest loginRequest = new LoginRequest(encryptedData,keyManager.getPublicKeyPem());
 
             // Send login request
             String baseUrl = preferenceManager.getBaseUrl();

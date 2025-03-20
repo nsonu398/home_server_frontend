@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.database.Observable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -25,13 +26,23 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import com.example.home_server_frontend.R;
+import com.example.home_server_frontend.database.ImageEntity;
+import com.example.home_server_frontend.repository.ImageRepository;
 import com.example.home_server_frontend.service.UploadService;
 import com.example.home_server_frontend.ui.adapters.ImageAdapter;
+import com.example.home_server_frontend.utils.ImageUtils;
 import com.example.home_server_frontend.utils.PreferenceManager;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -40,12 +51,14 @@ public class MainActivity extends AppCompatActivity {
     private ImageAdapter imageAdapter;
     private ProgressBar progressBar;
     private PreferenceManager preferenceManager;
+    private ImageRepository imageRepository;
 
     // Activity result launcher for storage permission handling
     private final ActivityResultLauncher<String> requestStoragePermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
                     loadDeviceImages();
+                    loadAllDeviceImages();
                     checkNotificationPermission();
                 } else {
                     handleStoragePermissionDenied();
@@ -80,6 +93,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize preference manager
         preferenceManager = new PreferenceManager(this);
+
+        //initialize imageRepo
+        imageRepository = new ImageRepository(this);
 
         // Check and request permissions
         checkStoragePermission();
@@ -145,9 +161,16 @@ public class MainActivity extends AppCompatActivity {
             // Permission already granted
             loadDeviceImages();
             checkNotificationPermission();
+            loadAllDeviceImages();
         } else {
             // Request permission
             requestStoragePermissionLauncher.launch(permission);
+        }
+    }
+
+    private void loadAllDeviceImages() {
+        if (preferenceManager.isAutoUploadEnabled() && preferenceManager.isFirstInstall()){
+            compositeDisposable.add(disposable);
         }
     }
 
@@ -257,6 +280,92 @@ public class MainActivity extends AppCompatActivity {
         return imagePaths;
     }
 
+    private final CompositeDisposable compositeDisposable = new CompositeDisposable();
+
+    // Background task (e.g., uploading an image)
+    Disposable disposable = Single.fromCallable(this::getAllImagePaths)
+            .subscribeOn(Schedulers.io()) // Runs on a background thread
+            .observeOn(AndroidSchedulers.mainThread()) // Switches to main thread for UI update
+            .subscribe(result -> {
+                if(preferenceManager.isFirstInstall()){
+                    // Update UI on main thread
+                    addAllImagesToDatabase(result);
+                }
+            }, error -> {
+                Log.d(TAG, "error: ");
+            });
+
+    private void addAllImagesToDatabase(List<String> imageList) {
+        List<ImageEntity> list = new ArrayList<>();
+        for (String imagePath : imageList){
+            if(){
+
+            }
+            File file = new File(imagePath);
+            long fileSize = ImageUtils.getImageSize(imagePath);
+            String resolution = ImageUtils.getImageResolution(imagePath);
+            ImageEntity imageEntity = new ImageEntity(
+                    imagePath,
+                    "PENDING",  // Initial status
+                    fileSize,
+                    resolution,
+                    file.getName()
+            );
+            list.add(imageEntity);
+        }
+        Log.d(TAG, "addAllImagesToDatabase: ");
+        compositeDisposable.add(
+                imageRepository
+                        .insertImages(list)
+                        .subscribe(id -> {
+                            Log.d(TAG, "addAllImagesToDatabase: "+id);
+                            if(!id.isEmpty()){
+                                preferenceManager.firstTimeDone();
+                            }
+                        }, error->{
+                            Log.d(TAG, "addAllImagesToDatabase: "+error);
+                        }
+                )
+        );
+
+    }
+
+
+    private List<String> getAllImagePaths() {
+        List<String> imagePaths = new ArrayList<>();
+
+        // Projection for image query
+        String[] projection = {
+                MediaStore.Images.Media.DATA
+        };
+
+        // Query external storage for images
+        try (Cursor cursor = getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                MediaStore.Images.Media.DATE_MODIFIED + " ASC"
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+
+                do {
+                    String path = cursor.getString(pathColumnIndex);
+                    imagePaths.add(path);
+                } while (cursor.moveToNext());
+            } else {
+                Log.e(TAG, "No images found or cursor is null");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error querying images", e);
+        }
+
+        Log.d(TAG, "Found " + imagePaths.size() + " image paths");
+        return imagePaths;
+    }
+
+
     private final BottomReached bottomReached = new BottomReached() {
         @Override
         public void onBottomReached() {
@@ -264,4 +373,12 @@ public class MainActivity extends AppCompatActivity {
             imageAdapter.addImages(imagePaths);
         }
     };
+
+    @Override
+    protected void onDestroy() {
+        if (disposable != null && !disposable.isDisposed()) {
+            disposable.dispose();
+        }
+        super.onDestroy();
+    }
 }

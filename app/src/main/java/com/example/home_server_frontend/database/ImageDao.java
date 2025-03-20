@@ -18,6 +18,9 @@ public interface ImageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     Single<Long> insertImage(ImageEntity image);
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    Single<List<Long>> insertAllImage(List<ImageEntity> images);
+
     @Update
     Completable updateImage(ImageEntity image);
 

@@ -6,7 +6,11 @@ public class LoginRequest {
     @SerializedName("encryptedData")
     private String encryptedData;
 
-    public LoginRequest(String encryptedData) {
+    @SerializedName("publicKey")
+    private String publicKey;
+
+    public LoginRequest(String encryptedData, String publicKey) {
         this.encryptedData = encryptedData;
+        this.publicKey = publicKey;
     }
 }

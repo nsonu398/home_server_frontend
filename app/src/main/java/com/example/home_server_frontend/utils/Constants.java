@@ -17,6 +17,7 @@ public class Constants {
 
     // Request codes
     public static final int REQUEST_CODE_REGISTER = 100;
+    public static final String IS_FIRST_INSALL = "is_first_install";
 
     // Base API URL method
     public static String getBaseUrl(String host, String port) {

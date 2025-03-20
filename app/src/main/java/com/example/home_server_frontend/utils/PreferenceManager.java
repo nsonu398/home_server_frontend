@@ -14,6 +14,14 @@ public class PreferenceManager {
         sharedPreferences = context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
     }
 
+    public boolean isFirstInstall(){
+        return sharedPreferences.getBoolean(Constants.IS_FIRST_INSALL, true);
+    }
+
+    public void firstTimeDone(){
+        sharedPreferences.edit().putBoolean(Constants.IS_FIRST_INSALL, false).apply();
+    }
+
     /**
      * Save authentication token
      */

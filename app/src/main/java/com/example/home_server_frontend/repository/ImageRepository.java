@@ -30,6 +30,12 @@ public class ImageRepository {
                 .observeOn(AndroidSchedulers.mainThread());
     }
 
+    public Single<List<Long>> insertImages(List<ImageEntity> images){
+        return imageDao.insertAllImage(images)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
+    }
+
     public Completable updateImage(ImageEntity image) {
         return imageDao.updateImage(image)
                 .subscribeOn(Schedulers.io())
