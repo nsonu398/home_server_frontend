@@ -4,7 +4,6 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
-import android.database.Observable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -38,7 +37,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
-import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -52,13 +50,14 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private PreferenceManager preferenceManager;
     private ImageRepository imageRepository;
+    private List<ImageEntity> imageEntities = new ArrayList<>();
 
     // Activity result launcher for storage permission handling
     private final ActivityResultLauncher<String> requestStoragePermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
-                    loadDeviceImages();
-                    loadAllDeviceImages();
+                    loadLocalImages();
+                    syncDeviceImages();
                     checkNotificationPermission();
                 } else {
                     handleStoragePermissionDenied();
@@ -96,6 +95,9 @@ public class MainActivity extends AppCompatActivity {
 
         //initialize imageRepo
         imageRepository = new ImageRepository(this);
+
+        imageAdapter = new ImageAdapter(this, imageEntities, bottomReached);
+        gridView.setAdapter(imageAdapter);
 
         // Check and request permissions
         checkStoragePermission();
@@ -159,19 +161,24 @@ public class MainActivity extends AppCompatActivity {
         if (ContextCompat.checkSelfPermission(this, permission)
                 == PackageManager.PERMISSION_GRANTED) {
             // Permission already granted
-            loadDeviceImages();
+            loadLocalImages();
             checkNotificationPermission();
-            loadAllDeviceImages();
+            syncDeviceImages();
         } else {
             // Request permission
             requestStoragePermissionLauncher.launch(permission);
         }
     }
 
-    private void loadAllDeviceImages() {
-        if (preferenceManager.isAutoUploadEnabled() && preferenceManager.isFirstInstall()){
+    private void syncDeviceImages() {
+        progressBar.setVisibility(View.VISIBLE);
+        if (preferenceManager.isAutoUploadEnabled() && preferenceManager.isFirstInstall()) {
             compositeDisposable.add(disposable);
         }
+        else{
+            progressBar.setVisibility(View.GONE);
+        }
+
     }
 
     private void handleStoragePermissionDenied() {
@@ -195,98 +202,20 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void loadDeviceImages() {
-        // Show progress
-        progressBar.setVisibility(View.VISIBLE);
-
-        // Run image loading in a background thread
-        new Thread(() -> {
-            List<ImageData> imagePaths = getImagePaths();
-
-            // Update UI on main thread
-            runOnUiThread(() -> {
-                // Hide progress
-                progressBar.setVisibility(View.GONE);
-
-                // Handle images
-                if (imagePaths.isEmpty()) {
-                    Toast.makeText(this, "No images found", Toast.LENGTH_SHORT).show();
-                    Log.e(TAG, "No images found on device");
-                    return;
-                }
-
-                Log.d(TAG, "Loaded " + imagePaths.size() + " images");
-
-                // Setup GridView
-                imageAdapter = new ImageAdapter(this, imagePaths, bottomReached);
-                gridView.setAdapter(imageAdapter);
-
-                // Set item click listener
-                gridView.setOnItemClickListener((parent, view, position, id) -> {
-                    ImageData imagePath = imagePaths.get(position);
-
-                    // Create intent to open image details
-                    Intent intent = new Intent(MainActivity.this, ImageDetailsActivity.class);
-                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_PATH, imagePath.path);
-
-                    // Extract file name from path
-                    File file = new File(imagePath.path);
-                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_NAME, file.getName());
-                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_ID, imagePath.id);
-                    intent.putExtra(ImageDetailsActivity.EXTRA_IMAGE_UPDATE_TIME, imagePath.updatedTime);
-
-                    startActivity(intent);
-                });
-            });
-        }).start();
-    }
-
-    private List<ImageData> getImagePaths() {
-        List<ImageData> imagePaths = new ArrayList<>();
-
-        // Projection for image query
-        String[] projection = {
-                MediaStore.Images.Media.DATA,
-                MediaStore.Images.Media._ID,
-                MediaStore.Images.Media.DATE_MODIFIED
-        };
-
-        // Query external storage for images
-        try (Cursor cursor = getContentResolver().query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                null,
-                null,
-                MediaStore.Images.Media.DATE_MODIFIED + " DESC"
-        )) {
-            if (cursor != null && cursor.move(index)) {
-                int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-                int idColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
-                int dateModifiedColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED);
-
-                do {
-                    String path = cursor.getString(pathColumnIndex);
-                    String imageId = cursor.getString(idColumnIndex);
-                    long updatedTime = cursor.getLong(dateModifiedColumnIndex) * 1000; // Convert to milliseconds
-
-                    imagePaths.add(new ImageData(path, imageId, updatedTime));
-                    index++;
-
-                    // Limit to 50 images to prevent memory issues
-                    if (index >= PAGE_SIZE) {
-                        PAGE_SIZE += 50;
-                        break;
-                    }
-                } while (cursor.moveToNext());
-            } else {
-                Log.e(TAG, "No images found or cursor is null");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error querying images", e);
-        }
-
-        Log.d(TAG, "Found " + imagePaths.size() + " image paths");
-        return imagePaths;
+    private void loadLocalImages() {
+        compositeDisposable.add(
+                imageRepository
+                        .getAllImages()
+                        .subscribe(images -> {
+                            imageEntities.clear();
+                           imageEntities.addAll(images);
+                           imageAdapter.notifyDataSetChanged();
+                        }, error -> {
+                            Log.d(TAG, "loadLocalImages: ");
+                        }
+                        )
+        );
+        progressBar.setVisibility(View.GONE);
     }
 
     private final CompositeDisposable compositeDisposable = new CompositeDisposable();
@@ -296,7 +225,7 @@ public class MainActivity extends AppCompatActivity {
             .subscribeOn(Schedulers.io()) // Runs on a background thread
             .observeOn(AndroidSchedulers.mainThread()) // Switches to main thread for UI update
             .subscribe(result -> {
-                if(preferenceManager.isFirstInstall()){
+                if (preferenceManager.isFirstInstall()) {
                     // Update UI on main thread
                     addAllImagesToDatabase(result);
                 }
@@ -305,9 +234,10 @@ public class MainActivity extends AppCompatActivity {
             });
 
     private void addAllImagesToDatabase(List<ImageData> imageList) {
+        progressBar.setVisibility(View.VISIBLE);
         List<ImageEntity> list = new ArrayList<>();
-        for (ImageData imageData : imageList){
-            if(!ImageUtils.isValidImageFile(imageData.path)){
+        for (ImageData imageData : imageList) {
+            if (!ImageUtils.isValidImageFile(imageData.path)) {
                 continue;
             }
             File file = new File(imageData.path);
@@ -329,18 +259,19 @@ public class MainActivity extends AppCompatActivity {
                 imageRepository
                         .insertImages(list)
                         .subscribe(id -> {
-                            Log.d(TAG, "addAllImagesToDatabase: "+id);
-                            if(!id.isEmpty()){
-                                preferenceManager.firstTimeDone();
-                            }
-                        }, error->{
-                            Log.d(TAG, "addAllImagesToDatabase: "+error);
-                        }
-                )
+                                    Log.d(TAG, "addAllImagesToDatabase: " + id);
+                                    if (!id.isEmpty()) {
+                                        preferenceManager.firstTimeDone();
+                                    }
+                                    progressBar.setVisibility(View.GONE);
+                                }, error -> {
+                                    Log.d(TAG, "addAllImagesToDatabase: " + error);
+                                    progressBar.setVisibility(View.GONE);
+                                }
+                        )
         );
 
     }
-
 
     private List<ImageData> getAllImagePaths() {
         List<ImageData> imageDataList = new ArrayList<>();
@@ -364,7 +295,6 @@ public class MainActivity extends AppCompatActivity {
                 int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
                 int idColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
                 int dateModifiedColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED);
-                int index = 0;
                 do {
                     String path = cursor.getString(pathColumnIndex);
                     String imageId = cursor.getString(idColumnIndex);
@@ -374,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
                     ImageData imageData = new ImageData(path, imageId, updatedTime);
                     imageDataList.add(imageData);
                     index++;
-                } while (cursor.moveToNext() && index<10);
+                } while (cursor.moveToNext());
             } else {
                 Log.e(TAG, "No images found or cursor is null");
             }
@@ -389,8 +319,7 @@ public class MainActivity extends AppCompatActivity {
     private final BottomReached bottomReached = new BottomReached() {
         @Override
         public void onBottomReached() {
-            List<ImageData> imagePaths = getImagePaths();
-            imageAdapter.addImages(imagePaths);
+            //loadLocalImages();
         }
     };
 

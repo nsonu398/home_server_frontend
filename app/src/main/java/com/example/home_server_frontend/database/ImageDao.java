@@ -27,7 +27,7 @@ public interface ImageDao {
     @Delete
     Completable deleteImage(ImageEntity image);
 
-    @Query("SELECT * FROM images ORDER BY timestamp DESC")
+    @Query("SELECT * FROM images ORDER BY updatedTime DESC")
     Flowable<List<ImageEntity>> getAllImages();
 
     @Query("SELECT * FROM images WHERE status = :status ORDER BY timestamp DESC")
