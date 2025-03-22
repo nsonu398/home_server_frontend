@@ -104,4 +104,10 @@ public class ImageRepository {
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
     }
+
+    public Single<Long> getMostRecentImageTimestamp() {
+        return imageDao.getMostRecentImageTimestamp()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
+    }
 }

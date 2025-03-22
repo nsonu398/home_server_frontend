@@ -110,6 +110,22 @@ public class PreferenceManager {
     }
 
     /**
+     * Save the timestamp of the last image sync
+     * @param timestamp Timestamp in milliseconds
+     */
+    public void setLastImageSyncTime(long timestamp) {
+        sharedPreferences.edit().putLong(Constants.PREF_LAST_IMAGE_SYNC_TIME, timestamp).apply();
+    }
+
+    /**
+     * Get the timestamp of the last image sync
+     * @return Timestamp in milliseconds, or 0 if no sync has been done
+     */
+    public long getLastImageSyncTime() {
+        return sharedPreferences.getLong(Constants.PREF_LAST_IMAGE_SYNC_TIME, 0);
+    }
+
+    /**
      * Clear all user data
      */
     public void clearUserData() {

@@ -27,13 +27,16 @@ import androidx.core.content.ContextCompat;
 import com.example.home_server_frontend.R;
 import com.example.home_server_frontend.database.ImageEntity;
 import com.example.home_server_frontend.repository.ImageRepository;
+import com.example.home_server_frontend.service.MediaSyncService;
 import com.example.home_server_frontend.service.UploadService;
 import com.example.home_server_frontend.ui.adapters.ImageAdapter;
 import com.example.home_server_frontend.utils.ImageUtils;
 import com.example.home_server_frontend.utils.PreferenceManager;
+import com.example.home_server_frontend.workers.MediaSyncWorker;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
@@ -59,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
                     loadLocalImages();
                     syncDeviceImages();
                     checkNotificationPermission();
+                    startMediaSync();
                 } else {
                     handleStoragePermissionDenied();
                 }
@@ -77,9 +81,6 @@ public class MainActivity extends AppCompatActivity {
                     startUploadService();
                 }
             });
-
-    private int index = 1;
-    private int PAGE_SIZE = 50;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -101,6 +102,27 @@ public class MainActivity extends AppCompatActivity {
 
         // Check and request permissions
         checkStoragePermission();
+    }
+
+    //this is to start the process of fetching newly added images in a periodic way
+    private void startMediaSync(){
+        // Initialize media sync if auto-upload is enabled
+        if (preferenceManager.isAutoUploadEnabled()) {
+            // Schedule periodic sync as fallback mechanism
+            MediaSyncWorker.schedulePeriodicSync(this);
+
+            // Check if we need to perform initial sync
+            if (preferenceManager.getLastImageSyncTime() == 0) {
+                // We've never synced before, start an initial sync
+                Intent mediaServiceIntent = new Intent(this, MediaSyncService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(mediaServiceIntent);
+                } else {
+                    startService(mediaServiceIntent);
+                }
+                Log.d(TAG, "Started initial media sync");
+            }
+        }
     }
 
     @Override
@@ -164,6 +186,7 @@ public class MainActivity extends AppCompatActivity {
             loadLocalImages();
             checkNotificationPermission();
             syncDeviceImages();
+            startMediaSync();
         } else {
             // Request permission
             requestStoragePermissionLauncher.launch(permission);
@@ -262,6 +285,7 @@ public class MainActivity extends AppCompatActivity {
                                     Log.d(TAG, "addAllImagesToDatabase: " + id);
                                     if (!id.isEmpty()) {
                                         preferenceManager.firstTimeDone();
+                                        setInitialLastSyncTime();
                                     }
                                     progressBar.setVisibility(View.GONE);
                                 }, error -> {
@@ -303,7 +327,6 @@ public class MainActivity extends AppCompatActivity {
                     // Store as a tuple of path, id, and modified time
                     ImageData imageData = new ImageData(path, imageId, updatedTime);
                     imageDataList.add(imageData);
-                    index++;
                 } while (cursor.moveToNext());
             } else {
                 Log.e(TAG, "No images found or cursor is null");
@@ -323,6 +346,35 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    // In MainActivity.java, after successful bulk sync
+    private void setInitialLastSyncTime() {
+        // Query for the most recent image timestamp in our database
+        compositeDisposable.add(
+                imageRepository.getMostRecentImageTimestamp()
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(
+                                maxTimestamp -> {
+                                    // If we found a timestamp, use it
+                                    if (maxTimestamp > 0) {
+                                        preferenceManager.setLastImageSyncTime(maxTimestamp);
+                                        Log.d(TAG, "Set initial last sync time to: " + new Date(maxTimestamp));
+                                    } else {
+                                        // If no images in DB, just use current time
+                                        long currentTime = System.currentTimeMillis();
+                                        preferenceManager.setLastImageSyncTime(currentTime);
+                                        Log.d(TAG, "No images found, setting last sync time to now");
+                                    }
+                                },
+                                error -> {
+                                    // On error, just use current time
+                                    Log.e(TAG, "Error getting max timestamp", error);
+                                    preferenceManager.setLastImageSyncTime(System.currentTimeMillis());
+                                }
+                        )
+        );
+    }
+
     @Override
     protected void onDestroy() {
         if (disposable != null && !disposable.isDisposed()) {
@@ -336,7 +388,7 @@ public class MainActivity extends AppCompatActivity {
         public String id;
         public long updatedTime;
 
-        ImageData(String path, String id, long updatedTime) {
+        public ImageData(String path, String id, long updatedTime) {
             this.path = path;
             this.id = id;
             this.updatedTime = updatedTime;

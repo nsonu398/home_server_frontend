@@ -51,4 +51,7 @@ public interface ImageDao {
 
     @Query("UPDATE images SET remoteUrl = :remoteUrl, status = 'UPLOADED' WHERE id = :id")
     Completable setImageUploaded(long id, String remoteUrl);
+
+    @Query("SELECT MAX(updatedTime) FROM images")
+    Single<Long> getMostRecentImageTimestamp();
 }

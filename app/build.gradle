@@ -71,4 +71,11 @@ dependencies {
     // ReactiveX
     implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
     implementation 'io.reactivex.rxjava3:rxjava:3.1.5'
+
+    // WorkManager
+    implementation "androidx.work:work-runtime:2.8.1"
+    implementation "androidx.work:work-rxjava3:2.8.1"
+
+// If not already included:
+    implementation "androidx.lifecycle:lifecycle-service:2.6.2"
 }
