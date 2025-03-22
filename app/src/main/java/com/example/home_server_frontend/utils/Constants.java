@@ -19,6 +19,7 @@ public class Constants {
 
     // Request codes
     public static final int REQUEST_CODE_REGISTER = 100;
+    public static final String ARE_SERVER_IMAGES_FETCHED = "are_server_images_fetched";
 
     // Base API URL method
     public static String getBaseUrl(String host, String port) {

@@ -59,7 +59,6 @@ public class MainActivity extends AppCompatActivity {
     private final ActivityResultLauncher<String> requestStoragePermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
                 if (isGranted) {
-                    loadLocalImages();
                     syncDeviceImages();
                     checkNotificationPermission();
                     startMediaSync();
@@ -102,6 +101,20 @@ public class MainActivity extends AppCompatActivity {
 
         // Check and request permissions
         checkStoragePermission();
+
+        //get all images from server
+        fetchServerImages();
+
+        //load local images that are present in the roomDB
+        loadLocalImages();
+
+
+    }
+
+    private void fetchServerImages() {
+        if(!preferenceManager.isAllServerImagesFetched()){
+            imageRepository.startSync();
+        }
     }
 
     //this is to start the process of fetching newly added images in a periodic way
@@ -183,7 +196,6 @@ public class MainActivity extends AppCompatActivity {
         if (ContextCompat.checkSelfPermission(this, permission)
                 == PackageManager.PERMISSION_GRANTED) {
             // Permission already granted
-            loadLocalImages();
             checkNotificationPermission();
             syncDeviceImages();
             startMediaSync();
@@ -194,14 +206,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void syncDeviceImages() {
-        progressBar.setVisibility(View.VISIBLE);
-        if (preferenceManager.isAutoUploadEnabled() && preferenceManager.isFirstInstall()) {
-            compositeDisposable.add(disposable);
-        }
-        else{
-            progressBar.setVisibility(View.GONE);
-        }
-
+        preferenceManager.serverImageFetchIsCompleted(new PreferenceManager.isCompleteListener() {
+            @Override
+            public void isComplete(Object object) {
+                progressBar.setVisibility(View.VISIBLE);
+                if (preferenceManager.isAutoUploadEnabled() && preferenceManager.isFirstInstall()) {
+                    compositeDisposable.add(disposable);
+                }
+                else{
+                    progressBar.setVisibility(View.GONE);
+                }
+            }
+        });
     }
 
     private void handleStoragePermissionDenied() {
@@ -219,7 +235,7 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this,
                             "Cannot display images without permission",
                             Toast.LENGTH_SHORT).show();
-                    finish();
+                    //finish();
                 })
                 .create()
                 .show();

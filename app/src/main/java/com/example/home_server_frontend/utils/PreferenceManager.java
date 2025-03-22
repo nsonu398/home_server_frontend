@@ -3,6 +3,10 @@ package com.example.home_server_frontend.utils;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
 
 /**
  * Manages app preferences for user data and tokens
@@ -132,5 +136,29 @@ public class PreferenceManager {
         sharedPreferences.edit()
                 .remove(Constants.PREF_AUTH_TOKEN)
                 .apply();
+    }
+
+    public boolean isAllServerImagesFetched() {
+        return sharedPreferences.getBoolean(Constants.ARE_SERVER_IMAGES_FETCHED, false);
+    }
+
+    private Map<String, isCompleteListener> liveMap = new HashMap<>();
+
+    public void serverImageFetchIsCompleted(isCompleteListener listener){
+        liveMap.put(Constants.ARE_SERVER_IMAGES_FETCHED, listener);
+        if(isAllServerImagesFetched()){
+            Objects.requireNonNull(liveMap.get(Constants.ARE_SERVER_IMAGES_FETCHED)).isComplete(null);
+        }
+    }
+
+    public void setAllServerImagesFetched(){
+        sharedPreferences.edit().putBoolean(Constants.ARE_SERVER_IMAGES_FETCHED, true).apply();
+        if(liveMap.containsKey(Constants.ARE_SERVER_IMAGES_FETCHED)){
+            Objects.requireNonNull(liveMap.get(Constants.ARE_SERVER_IMAGES_FETCHED)).isComplete(null);
+        }
+    }
+
+    public interface isCompleteListener{
+        void isComplete(Object object);
     }
 }

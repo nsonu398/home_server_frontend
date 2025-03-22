@@ -1,5 +1,6 @@
 package com.example.home_server_frontend.api;
 
+import com.example.home_server_frontend.api.models.ImageListResponse;
 import com.example.home_server_frontend.api.models.ImageUploadResponse;
 import com.example.home_server_frontend.api.models.KeyExchangeResponse;
 import com.example.home_server_frontend.api.models.LoginRequest;
@@ -70,4 +71,8 @@ public interface ApiService {
             @Part("metadata") RequestBody metadata,
             @Part MultipartBody.Part image
     );
+
+    // Add to ApiService.java
+    @GET("/api/images")
+    Call<ImageListResponse> getServerImages(@Header("Authorization") String authToken);
 }

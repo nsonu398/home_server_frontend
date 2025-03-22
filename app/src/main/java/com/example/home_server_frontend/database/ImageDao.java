@@ -5,6 +5,7 @@ import androidx.room.Delete;
 import androidx.room.Insert;
 import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
+import androidx.room.Transaction;
 import androidx.room.Update;
 
 import java.util.List;
@@ -20,6 +21,10 @@ public interface ImageDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     Single<List<Long>> insertAllImage(List<ImageEntity> images);
+
+    @Transaction
+    @Query("SELECT fileName FROM images")
+    Single<List<String>> getAllImageFileNames();
 
     @Update
     Completable updateImage(ImageEntity image);
