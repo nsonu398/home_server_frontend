@@ -22,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
 
 import com.example.home_server_frontend.R;
@@ -89,6 +90,8 @@ public class MainActivity extends AppCompatActivity {
         // Initialize views
         gridView = findViewById(R.id.gridView);
         progressBar = findViewById(R.id.progress_bar);
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
 
         // Initialize preference manager
         preferenceManager = new PreferenceManager(this);

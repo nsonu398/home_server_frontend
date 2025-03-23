@@ -126,6 +126,7 @@ public class ServerSettingsActivity extends AppCompatActivity {
 
                     Intent intent = new Intent(ServerSettingsActivity.this, LoginActivity.class);
                     startActivity(intent);
+                    finish();
                 } else {
                     showProgress(false);
                     Toast.makeText(ServerSettingsActivity.this,

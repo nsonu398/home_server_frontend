@@ -50,4 +50,22 @@
         <item name="passwordToggleEnabled">true</item>
         <item name="passwordToggleTint">@color/primary</item>
     </style>
+    <!-- Button styles -->
+    <style name="Widget.HomeServer.Button" parent="Widget.AppCompat.Button">
+        <item name="android:textColor">@color/black</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:background">@drawable/button_background</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+
+    <!-- Secondary button style -->
+    <style name="Widget.HomeServer.Button.Secondary" parent="Widget.HomeServer.Button">
+        <item name="android:background">@drawable/button_background_secondary</item>
+    </style>
 </resources>

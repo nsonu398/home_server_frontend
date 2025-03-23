@@ -38,4 +38,7 @@
     <color name="edit_text_text_color">@color/on_background</color>
     <color name="edit_text_hint_color">#757575</color>
     <color name="edit_text_border_color">#BDBDBD</color>
+
+    <color name="ripple_color">#33FFFFFF</color>
+
 </resources>

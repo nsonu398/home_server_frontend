@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Dark/Night theme -->
-    <style name="Theme.Home_server_frontend" parent="Theme.AppCompat" >
+    <style name="Theme.Home_server_frontend" parent="Theme.AppCompat.DayNight.NoActionBar" >
         <!-- Primary brand color -->
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_dark</item>
@@ -24,5 +24,14 @@
         <item name="colorOnBackground">@color/on_background</item>
         <item name="colorOnSurface">@color/on_surface</item>
         <item name="colorOnError">@color/on_error</item>
+
+        <!-- Default widget styles -->
+        <item name="editTextStyle">@style/Widget.HomeServer.EditText</item>
+
+        <!-- If using TextInputLayout -->
+        <item name="textInputStyle">@style/Widget.HomeServer.TextInputLayout</item>
+
+        <item name="buttonStyle">@style/Widget.HomeServer.Button</item>
+
     </style>
 </resources>
