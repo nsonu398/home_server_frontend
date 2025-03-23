@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base EditText style -->
+    <style name="Widget.HomeServer.EditText" parent="Widget.MaterialComponents.TextInputEditText.OutlinedBox">
+        <item name="android:padding">16dp</item>
+        <item name="android:background">@drawable/edit_text_background</item>
+        <item name="android:textColor">@color/edit_text_text_color</item>
+        <item name="android:textColorHint">@color/edit_text_hint_color</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:inputType">text</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <!-- Password EditText style -->
+    <style name="Widget.HomeServer.EditText.Password">
+        <item name="android:inputType">textPassword</item>
+        <item name="passwordToggleEnabled">true</item>
+        <item name="passwordToggleTint">@color/primary</item>
+    </style>
+
+    <!-- Multiline EditText style for comments or descriptions -->
+    <style name="Widget.HomeServer.EditText.Multiline">
+        <item name="android:inputType">textMultiLine</item>
+        <item name="android:gravity">top|start</item>
+        <item name="android:minLines">4</item>
+        <item name="android:maxLines">8</item>
+    </style>
+
+    <!-- Number EditText style -->
+    <style name="Widget.HomeServer.EditText.Number">
+        <item name="android:inputType">number</item>
+    </style>
+
+    <!-- Email EditText style -->
+    <style name="Widget.HomeServer.EditText.Email">
+        <item name="android:inputType">textEmailAddress</item>
+    </style>
+    <style name="Widget.HomeServer.TextInputLayout" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/primary</item>
+        <item name="hintTextColor">@color/primary</item>
+        <item name="errorTextColor">@color/error</item>
+        <item name="boxStrokeErrorColor">@color/error</item>
+        <item name="errorIconTint">@color/error</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
+
+    <style name="Widget.HomeServer.TextInputLayout.Password">
+        <item name="passwordToggleEnabled">true</item>
+        <item name="passwordToggleTint">@color/primary</item>
+    </style>
+</resources>

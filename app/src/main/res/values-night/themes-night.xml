@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Light/Day theme -->
+    <!-- Dark/Night theme -->
     <style name="Theme.Home_server_frontend" parent="Theme.AppCompat" >
         <!-- Primary brand color -->
         <item name="colorPrimary">@color/primary</item>
@@ -13,7 +13,7 @@
         <item name="colorOnSecondary">@color/on_secondary</item>
 
         <!-- Status bar color -->
-        <item name="android:statusBarColor">@color/primary_dark</item>
+        <item name="android:statusBarColor">@color/black</item>
 
         <!-- Background colors -->
         <item name="android:colorBackground">@color/background</item>
@@ -24,12 +24,5 @@
         <item name="colorOnBackground">@color/on_background</item>
         <item name="colorOnSurface">@color/on_surface</item>
         <item name="colorOnError">@color/on_error</item>
-
-        <!-- Default widget styles -->
-        <item name="editTextStyle">@style/Widget.HomeServer.EditText</item>
-
-        <!-- If using TextInputLayout -->
-        <item name="textInputStyle">@style/Widget.HomeServer.TextInputLayout</item>
     </style>
-
 </resources>
