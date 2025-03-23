@@ -105,12 +105,22 @@ public class PreferenceManager {
         return sharedPreferences.getBoolean(Constants.PREF_AUTO_UPLOAD_ENABLED, false);
     }
 
+    public void observeAutoUploadSetting(isCompleteListener listener){
+        liveMap.put(Constants.PREF_AUTO_UPLOAD_ENABLED, listener);
+        if(isAutoUploadEnabled()){
+            listener.isComplete(null);
+        }
+    }
+
     /**
      * Set automatic upload preference
      * @param enabled whether automatic upload should be enabled
      */
     public void setAutoUploadEnabled(boolean enabled) {
         sharedPreferences.edit().putBoolean(Constants.PREF_AUTO_UPLOAD_ENABLED, enabled).apply();
+        if(enabled && liveMap.containsKey(Constants.PREF_AUTO_UPLOAD_ENABLED)){
+            Objects.requireNonNull(liveMap.get(Constants.PREF_AUTO_UPLOAD_ENABLED)).isComplete(null);
+        }
     }
 
     /**

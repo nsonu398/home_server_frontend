@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -144,6 +145,12 @@ public class UploadService extends Service {
                                             Log.d(TAG, "No pending uploads found");
                                             if (hasNotificationPermission) {
                                                 updateNotification("Upload Service", "No pending uploads");
+                                                new Handler().postDelayed(new Runnable() {
+                                                    @Override
+                                                    public void run() {
+                                                        stopSelf();
+                                                    }
+                                                },5000);
                                             }
                                         }
                                     },

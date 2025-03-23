@@ -22,6 +22,9 @@ public interface ImageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     Single<List<Long>> insertAllImage(List<ImageEntity> images);
 
+    @Query("UPDATE images SET status = :toStatus WHERE status=:fromStatus")
+    Completable updateAllRowsToStatus(String fromStatus, String toStatus);
+
     @Transaction
     @Query("SELECT fileName FROM images")
     Single<List<String>> getAllImageFileNames();

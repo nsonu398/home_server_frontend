@@ -1,8 +1,10 @@
 package com.example.home_server_frontend.ui;
 
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
@@ -18,11 +20,14 @@ import com.example.home_server_frontend.repository.ImageRepository;
 import com.example.home_server_frontend.service.UploadService;
 import com.example.home_server_frontend.utils.ImageUtils;
 import com.github.chrisbanes.photoview.PhotoView;
+import com.google.gson.Gson;
 import com.squareup.picasso.Picasso;
 
 import java.io.File;
 
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 public class ImageDetailsActivity extends AppCompatActivity {
 
@@ -30,6 +35,7 @@ public class ImageDetailsActivity extends AppCompatActivity {
     public static final String EXTRA_IMAGE_NAME = "image_name";
     public static final String EXTRA_IMAGE_ID = "image_id";
     public static final String EXTRA_IMAGE_UPDATE_TIME = "image_update_time";
+    private static final String TAG = "ImageDetailsActivity";
 
     private PhotoView imageView;
     private TextView imageName;
@@ -39,6 +45,7 @@ public class ImageDetailsActivity extends AppCompatActivity {
     private final CompositeDisposable disposables = new CompositeDisposable();
     private String imageID;
     private Long imageUpdateTime;
+    private ImageEntity selectedImageEntity;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -59,10 +66,11 @@ public class ImageDetailsActivity extends AppCompatActivity {
         imageRepository = new ImageRepository(this);
 
         // Get intent data
-        imagePath = getIntent().getStringExtra(EXTRA_IMAGE_PATH);
-        imageFileName = getIntent().getStringExtra(EXTRA_IMAGE_NAME);
-        imageID = getIntent().getStringExtra(EXTRA_IMAGE_ID);
-        imageUpdateTime = getIntent().getLongExtra(EXTRA_IMAGE_UPDATE_TIME, 0L);
+        selectedImageEntity = new Gson().fromJson(getIntent().getStringExtra("selectedImage"), ImageEntity.class);
+        imagePath = selectedImageEntity.getLocalUrl();
+        imageFileName = selectedImageEntity.getFileName();
+        imageID = selectedImageEntity.getImageId();
+        imageUpdateTime = selectedImageEntity.getUpdatedTime();
 
         if (imagePath != null) {
             // Load the image using Picasso
@@ -130,7 +138,12 @@ public class ImageDetailsActivity extends AppCompatActivity {
                         .subscribe(
                                 existingImage -> {
                                     // Image already exists in database, show message
-                                    Toast.makeText(this, "Image already queued for upload", Toast.LENGTH_SHORT).show();
+                                    if(existingImage.getStatus().equals("PENDING")){
+                                        Toast.makeText(this, "Image already queued for upload", Toast.LENGTH_SHORT).show();
+                                    }
+                                    else{
+                                        updateImageStatusToPending(existingImage);
+                                    }
                                 },
                                 error -> {
                                     // Image doesn't exist, insert it
@@ -140,18 +153,30 @@ public class ImageDetailsActivity extends AppCompatActivity {
         );
     }
 
+    @SuppressLint("CheckResult")
+    private void updateImageStatusToPending(ImageEntity existingImage) {
+        imageRepository.updateImageStatus(existingImage.getId(), "PENDING")
+                .subscribeOn(Schedulers.io())
+                .subscribe(
+                        () -> {
+                            Toast.makeText(this, "Image added to upload queue", Toast.LENGTH_SHORT).show();
+                        },
+                        error -> {
+                            Log.e(TAG, "Error updating image status to UPLOADING", error);
+                        }
+                );    }
+
     private void addImageToUploadQueue(ImageEntity imageEntity) {
         disposables.add(
                 imageRepository.insertImage(imageEntity)
                         .subscribe(
                                 id -> {
                                     Toast.makeText(this, "Image added to upload queue", Toast.LENGTH_SHORT).show();
-                                    // Here you could trigger the actual upload service if desired
-                                    //startUploadService();
+                                    startUploadService();
                                 },
                                 error -> {
                                     Toast.makeText(this, "Failed to add image to upload queue", Toast.LENGTH_SHORT).show();
-                                    error.printStackTrace();
+                                    Log.e(TAG, "addImageToUploadQueue: ", error);
                                 }
                         )
         );
@@ -159,7 +184,6 @@ public class ImageDetailsActivity extends AppCompatActivity {
 
     private void startUploadService() {
         Intent serviceIntent = new Intent(this, UploadService.class);
-
         // Starting service as foreground service for Android O and higher
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent);

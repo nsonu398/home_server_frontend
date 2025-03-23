@@ -108,17 +108,17 @@ public class MainActivity extends AppCompatActivity {
         //load local images that are present in the roomDB
         loadLocalImages();
 
-
     }
 
     private void fetchServerImages() {
-        if(!preferenceManager.isAllServerImagesFetched()){
-            imageRepository.startSync();
+        imageRepository.startSync();
+        if (!preferenceManager.isAllServerImagesFetched()) {
+            //imageRepository.startSync();
         }
     }
 
     //this is to start the process of fetching newly added images in a periodic way
-    private void startMediaSync(){
+    private void startMediaSync() {
         // Initialize media sync if auto-upload is enabled
         if (preferenceManager.isAutoUploadEnabled()) {
             // Schedule periodic sync as fallback mechanism
@@ -210,10 +210,19 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void isComplete(Object object) {
                 progressBar.setVisibility(View.VISIBLE);
-                if (preferenceManager.isAutoUploadEnabled() && preferenceManager.isFirstInstall()) {
-                    compositeDisposable.add(disposable);
-                }
-                else{
+                if (preferenceManager.isFirstInstall()) {
+                    compositeDisposable.add(Single.fromCallable(()-> getAllImagePaths())
+                            .subscribeOn(Schedulers.io()) // Runs on a background thread
+                            .observeOn(AndroidSchedulers.mainThread()) // Switches to main thread for UI update
+                            .subscribe(result -> {
+                                if (preferenceManager.isFirstInstall()) {
+                                    // Update UI on main thread
+                                    addAllImagesToDatabase(result);
+                                }
+                            }, error -> {
+                                Log.d(TAG, "error: ");
+                            }));
+                } else {
                     progressBar.setVisibility(View.GONE);
                 }
             }
@@ -246,12 +255,12 @@ public class MainActivity extends AppCompatActivity {
                 imageRepository
                         .getAllImages()
                         .subscribe(images -> {
-                            imageEntities.clear();
-                           imageEntities.addAll(images);
-                           imageAdapter.notifyDataSetChanged();
-                        }, error -> {
-                            Log.d(TAG, "loadLocalImages: ");
-                        }
+                                    imageEntities.clear();
+                                    imageEntities.addAll(images);
+                                    imageAdapter.notifyDataSetChanged();
+                                }, error -> {
+                                    Log.d(TAG, "loadLocalImages: ");
+                                }
                         )
         );
         progressBar.setVisibility(View.GONE);
@@ -259,18 +268,6 @@ public class MainActivity extends AppCompatActivity {
 
     private final CompositeDisposable compositeDisposable = new CompositeDisposable();
 
-    // Background task (e.g., uploading an image)
-    Disposable disposable = Single.fromCallable(this::getAllImagePaths)
-            .subscribeOn(Schedulers.io()) // Runs on a background thread
-            .observeOn(AndroidSchedulers.mainThread()) // Switches to main thread for UI update
-            .subscribe(result -> {
-                if (preferenceManager.isFirstInstall()) {
-                    // Update UI on main thread
-                    addAllImagesToDatabase(result);
-                }
-            }, error -> {
-                Log.d(TAG, "error: ");
-            });
 
     private void addAllImagesToDatabase(List<ImageData> imageList) {
         progressBar.setVisibility(View.VISIBLE);
@@ -284,7 +281,7 @@ public class MainActivity extends AppCompatActivity {
             String resolution = ImageUtils.getImageResolution(imageData.path);
             ImageEntity imageEntity = new ImageEntity(
                     imageData.path,
-                    "PENDING",  // Initial status
+                    "",  // Initial status
                     fileSize,
                     resolution,
                     file.getName(),
@@ -389,14 +386,6 @@ public class MainActivity extends AppCompatActivity {
                                 }
                         )
         );
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (disposable != null && !disposable.isDisposed()) {
-            disposable.dispose();
-        }
-        super.onDestroy();
     }
 
     public static class ImageData {
