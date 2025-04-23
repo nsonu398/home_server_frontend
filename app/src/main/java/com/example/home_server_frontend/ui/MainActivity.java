@@ -1,6 +1,7 @@
 package com.example.home_server_frontend.ui;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -43,11 +44,11 @@ import java.util.List;
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
+    private static final int BATCH_SIZE = 10;
 
     private GridView gridView;
     private ImageAdapter imageAdapter;
@@ -55,6 +56,10 @@ public class MainActivity extends AppCompatActivity {
     private PreferenceManager preferenceManager;
     private ImageRepository imageRepository;
     private List<ImageEntity> imageEntities = new ArrayList<>();
+    private final CompositeDisposable compositeDisposable = new CompositeDisposable();
+
+    private boolean isLoadingBatch = false;
+    private long lastLoadedTimestamp = Long.MAX_VALUE; // Start with max value to get the newest images first
 
     // Activity result launcher for storage permission handling
     private final ActivityResultLauncher<String> requestStoragePermissionLauncher =
@@ -82,6 +87,15 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
+    private final BottomReached bottomReached = new BottomReached() {
+        @Override
+        public void onBottomReached() {
+            if (preferenceManager.isFirstInstall() && !isLoadingBatch) {
+                loadImageBatch();
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -96,21 +110,41 @@ public class MainActivity extends AppCompatActivity {
         // Initialize preference manager
         preferenceManager = new PreferenceManager(this);
 
-        //initialize imageRepo
+        // Initialize imageRepo
         imageRepository = new ImageRepository(this);
+
+        getlastLoadedTimestampValue();
 
         imageAdapter = new ImageAdapter(this, imageEntities, bottomReached);
         gridView.setAdapter(imageAdapter);
 
-        // Check and request permissions
-        checkStoragePermission();
-
-        //get all images from server
+        // Get all images from server
         fetchServerImages();
 
-        //load local images that are present in the roomDB
+        // Load local images that are present in the roomDB
         loadLocalImages();
+    }
 
+    @SuppressLint("CheckResult")
+    private void getlastLoadedTimestampValue() {
+        imageRepository.getLastImageEntity()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                        oldestUpdatedTime -> {
+                            // Success callback - use the value here
+                            Log.d("ImageCheck", "Oldest updated time: " + oldestUpdatedTime);
+                            // You can use the value in this block
+                            // For example, assign to a field:
+                            this.lastLoadedTimestamp = oldestUpdatedTime;
+                            // Check and request permissions
+                            checkStoragePermission();
+                        },
+                        throwable -> {
+                            // Error callback
+                            Log.e("ImageCheck", "Failed to get oldest updated time", throwable);
+                        }
+                );
     }
 
     private void fetchServerImages() {
@@ -209,27 +243,129 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void syncDeviceImages() {
-        preferenceManager.serverImageFetchIsCompleted(new PreferenceManager.isCompleteListener() {
-            @Override
-            public void isComplete(Object object) {
-                progressBar.setVisibility(View.VISIBLE);
-                if (preferenceManager.isFirstInstall()) {
-                    compositeDisposable.add(Single.fromCallable(()-> getAllImagePaths())
-                            .subscribeOn(Schedulers.io()) // Runs on a background thread
-                            .observeOn(AndroidSchedulers.mainThread()) // Switches to main thread for UI update
-                            .subscribe(result -> {
-                                if (preferenceManager.isFirstInstall()) {
-                                    // Update UI on main thread
-                                    addAllImagesToDatabase(result);
-                                }
-                            }, error -> {
-                                Log.d(TAG, "error: ");
-                            }));
-                } else {
+        progressBar.setVisibility(View.VISIBLE);
+        loadImageBatch();
+    }
+
+    private void loadImageBatch() {
+        if (isLoadingBatch) return;
+        isLoadingBatch = true;
+        compositeDisposable.add(Single.fromCallable(() -> getImageBatch(lastLoadedTimestamp, BATCH_SIZE))
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(batch -> {
+                    if (!batch.isEmpty()) {
+                        addBatchToDatabase(batch);
+                    } else {
+                        // No more images to load
+                        preferenceManager.firstTimeDone();
+                        setInitialLastSyncTime();
+                        progressBar.setVisibility(View.GONE);
+                        isLoadingBatch = false;
+                    }
+                }, error -> {
+                    Log.e(TAG, "Error loading image batch", error);
                     progressBar.setVisibility(View.GONE);
-                }
+                    isLoadingBatch = false;
+                }));
+    }
+
+    private List<ImageData> getImageBatch(long beforeTimestamp, int batchSize) {
+        List<ImageData> batchImages = new ArrayList<>();
+
+        String[] projection = {
+                MediaStore.Images.Media.DATA,
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATE_MODIFIED
+        };
+
+        String selection = MediaStore.Images.Media.DATE_MODIFIED + " < ?";
+        String[] selectionArgs = { String.valueOf(beforeTimestamp / 1000) }; // Convert to seconds for query
+        String sortOrder = MediaStore.Images.Media.DATE_MODIFIED + " DESC";
+
+        try (Cursor cursor = getApplicationContext().getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                sortOrder
+        )) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                int idColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                int dateModifiedColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED);
+                int count = 0;
+                do {
+                    String path = cursor.getString(pathColumnIndex);
+                    String imageId = cursor.getString(idColumnIndex);
+                    long updatedTime = cursor.getLong(dateModifiedColumnIndex) * 1000; // Convert to milliseconds
+
+                    // Skip if file doesn't exist or isn't a valid image
+                    if (!new File(path).exists() || !ImageUtils.isValidImageFile(path)) {
+                        continue;
+                    }
+
+                    ImageData imageData = new ImageData(path, imageId, updatedTime);
+                    batchImages.add(imageData);
+
+                    // Update the lastLoadedTimestamp to the oldest timestamp in this batch
+                    if (updatedTime < lastLoadedTimestamp) {
+                        lastLoadedTimestamp = updatedTime;
+                    }
+                    count++;
+                } while (cursor.moveToNext() && count < batchSize);
             }
-        });
+        } catch (Exception e) {
+            Log.e(TAG, "Error querying image batch", e);
+        }
+
+        return batchImages;
+    }
+
+    private void addBatchToDatabase(List<ImageData> batch) {
+        progressBar.setVisibility(View.VISIBLE);
+        List<ImageEntity> entities = new ArrayList<>();
+
+        for (ImageData imageData : batch) {
+            if (!ImageUtils.isValidImageFile(imageData.path)) {
+                continue;
+            }
+
+            File file = new File(imageData.path);
+            long fileSize = ImageUtils.getImageSize(imageData.path);
+            String resolution = ImageUtils.getImageResolution(imageData.path);
+
+            ImageEntity imageEntity = new ImageEntity(
+                    imageData.path,
+                    "",  // Initial status
+                    fileSize,
+                    resolution,
+                    file.getName(),
+                    imageData.id,
+                    imageData.updatedTime
+            );
+            entities.add(imageEntity);
+        }
+
+        if (!entities.isEmpty()) {
+            compositeDisposable.add(
+                    imageRepository.insertImages(entities)
+                            .subscribe(ids -> {
+                                Log.d(TAG, "Added batch of " + ids.size() + " images to database");
+                                isLoadingBatch = false;
+                                // Load next batch
+                                loadImageBatch();
+                            }, error -> {
+                                Log.e(TAG, "Error adding batch to database", error);
+                                isLoadingBatch = false;
+                                progressBar.setVisibility(View.GONE);
+                            })
+            );
+        } else {
+            // No valid entities in this batch, try next batch
+            isLoadingBatch = false;
+            loadImageBatch();
+        }
     }
 
     private void handleStoragePermissionDenied() {
@@ -258,109 +394,14 @@ public class MainActivity extends AppCompatActivity {
                 imageRepository
                         .getAllImages()
                         .subscribe(images -> {
-                                    imageEntities.clear();
-                                    imageEntities.addAll(images);
-                                    imageAdapter.notifyDataSetChanged();
-                                }, error -> {
-                                    Log.d(TAG, "loadLocalImages: ");
-                                }
-                        )
+                            imageEntities.clear();
+                            imageEntities.addAll(images);
+                            imageAdapter.notifyDataSetChanged();
+                        }, error -> {
+                            Log.d(TAG, "loadLocalImages: " + error);
+                        })
         );
-        progressBar.setVisibility(View.GONE);
     }
-
-    private final CompositeDisposable compositeDisposable = new CompositeDisposable();
-
-
-    private void addAllImagesToDatabase(List<ImageData> imageList) {
-        progressBar.setVisibility(View.VISIBLE);
-        List<ImageEntity> list = new ArrayList<>();
-        for (ImageData imageData : imageList) {
-            if (!ImageUtils.isValidImageFile(imageData.path)) {
-                continue;
-            }
-            File file = new File(imageData.path);
-            long fileSize = ImageUtils.getImageSize(imageData.path);
-            String resolution = ImageUtils.getImageResolution(imageData.path);
-            ImageEntity imageEntity = new ImageEntity(
-                    imageData.path,
-                    "",  // Initial status
-                    fileSize,
-                    resolution,
-                    file.getName(),
-                    imageData.id,
-                    imageData.updatedTime
-            );
-            list.add(imageEntity);
-        }
-        Log.d(TAG, "addAllImagesToDatabase: ");
-        compositeDisposable.add(
-                imageRepository
-                        .insertImages(list)
-                        .subscribe(id -> {
-                                    Log.d(TAG, "addAllImagesToDatabase: " + id);
-                                    if (!id.isEmpty()) {
-                                        preferenceManager.firstTimeDone();
-                                        setInitialLastSyncTime();
-                                    }
-                                    progressBar.setVisibility(View.GONE);
-                                }, error -> {
-                                    Log.d(TAG, "addAllImagesToDatabase: " + error);
-                                    progressBar.setVisibility(View.GONE);
-                                }
-                        )
-        );
-
-    }
-
-    private List<ImageData> getAllImagePaths() {
-        List<ImageData> imageDataList = new ArrayList<>();
-
-        // Update projection to include ID and last modified date
-        String[] projection = {
-                MediaStore.Images.Media.DATA,
-                MediaStore.Images.Media._ID,
-                MediaStore.Images.Media.DATE_MODIFIED
-        };
-
-        // Query external storage for images
-        try (Cursor cursor = getContentResolver().query(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                null,
-                null,
-                MediaStore.Images.Media.DATE_MODIFIED + " ASC"
-        )) {
-            if (cursor != null && cursor.moveToFirst()) {
-                int pathColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-                int idColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
-                int dateModifiedColumnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED);
-                do {
-                    String path = cursor.getString(pathColumnIndex);
-                    String imageId = cursor.getString(idColumnIndex);
-                    long updatedTime = cursor.getLong(dateModifiedColumnIndex) * 1000; // Convert to milliseconds
-
-                    // Store as a tuple of path, id, and modified time
-                    ImageData imageData = new ImageData(path, imageId, updatedTime);
-                    imageDataList.add(imageData);
-                } while (cursor.moveToNext());
-            } else {
-                Log.e(TAG, "No images found or cursor is null");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error querying images", e);
-        }
-
-        Log.d(TAG, "Found " + imageDataList.size() + " image paths");
-        return imageDataList;
-    }
-
-    private final BottomReached bottomReached = new BottomReached() {
-        @Override
-        public void onBottomReached() {
-            //loadLocalImages();
-        }
-    };
 
     // In MainActivity.java, after successful bulk sync
     private void setInitialLastSyncTime() {
@@ -413,5 +454,11 @@ public class MainActivity extends AppCompatActivity {
         public String getPath() {
             return path;
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        compositeDisposable.clear();
     }
 }

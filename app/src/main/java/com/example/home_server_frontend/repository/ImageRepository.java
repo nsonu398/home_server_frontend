@@ -33,6 +33,7 @@ import java.util.Set;
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -247,10 +248,22 @@ public class ImageRepository {
                     if (uniqueImages.isEmpty()) {
                         return Single.just(new ArrayList<Long>());
                     } else {
-                        return imageDao.insertAllImage(uniqueImages);
+                        // Insert images one by one and collect the IDs
+                        return Observable.fromIterable(uniqueImages)
+                                .flatMapSingle(imageDao::insertImage)
+                                .toList()
+                                .subscribeOn(Schedulers.io())
+                                .observeOn(AndroidSchedulers.mainThread());
                     }
                 })
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
+    }
+
+    public Single<Long> getLastImageEntity() {
+        return imageDao.getOldestTimestamp()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .onErrorReturnItem(Long.MAX_VALUE);
     }
 }

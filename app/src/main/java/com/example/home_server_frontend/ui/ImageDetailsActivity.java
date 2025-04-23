@@ -19,8 +19,10 @@ import com.example.home_server_frontend.database.ImageEntity;
 import com.example.home_server_frontend.repository.ImageRepository;
 import com.example.home_server_frontend.service.UploadService;
 import com.example.home_server_frontend.utils.ImageUtils;
+import com.example.home_server_frontend.utils.PreferenceManager;
 import com.github.chrisbanes.photoview.PhotoView;
 import com.google.gson.Gson;
+import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 
 import java.io.File;
@@ -46,11 +48,14 @@ public class ImageDetailsActivity extends AppCompatActivity {
     private String imageID;
     private Long imageUpdateTime;
     private ImageEntity selectedImageEntity;
+    private PreferenceManager preferenceManager;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_image_details);
+
+        preferenceManager = new PreferenceManager(this);
 
         // Set up ActionBar
         if (getSupportActionBar() != null) {
@@ -72,7 +77,7 @@ public class ImageDetailsActivity extends AppCompatActivity {
         imageID = selectedImageEntity.getImageId();
         imageUpdateTime = selectedImageEntity.getUpdatedTime();
 
-        if (imagePath != null) {
+        if (imagePath != null && !imagePath.isEmpty()) {
             // Load the image using Picasso
             Picasso.get()
                     .load("file://" + imagePath)
@@ -87,6 +92,10 @@ public class ImageDetailsActivity extends AppCompatActivity {
                 imageFileName = file.getName();
                 imageName.setText(imageFileName);
             }
+        }else{
+            Picasso.get()
+                    .load(preferenceManager.getBaseUrl()+selectedImageEntity.getRemoteUrl())
+                    .into(imageView);
         }
     }
 

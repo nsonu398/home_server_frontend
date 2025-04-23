@@ -62,4 +62,7 @@ public interface ImageDao {
 
     @Query("SELECT MAX(updatedTime) FROM images")
     Single<Long> getMostRecentImageTimestamp();
+
+    @Query("SELECT MIN(updatedTime) FROM images")
+    Single<Long> getOldestTimestamp();
 }
